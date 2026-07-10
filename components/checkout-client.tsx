@@ -47,7 +47,7 @@ const inputClass = "w-full border border-slate-200 rounded-lg px-3 py-2.5 text-s
 
 export function CheckoutClient({ settings }: CheckoutClientProps) {
   const router = useRouter()
-  const { items, subtotal, clearCart } = useCart()
+  const { items, subtotal, clearCart, isHydrated } = useCart()
 
   const [fulfillment, setFulfillment] = useState<FulfillmentType>('delivery')
   const [name, setName] = useState('')
@@ -85,14 +85,15 @@ export function CheckoutClient({ settings }: CheckoutClientProps) {
   }, [fulfillment])
 
   useEffect(() => {
-    if (items.length === 0) router.replace('/')
-  }, [items.length, router])
+    if (isHydrated && items.length === 0) router.replace('/')
+  }, [isHydrated, items.length, router])
 
   const delivery_fee = fulfillment === 'delivery' ? (deliveryCalc?.delivery_fee ?? 0) : 0
   const total = subtotal + delivery_fee
   const needsProof = ['gcash', 'bank_transfer', 'qr'].includes(paymentMethod)
 
-  if (items.length === 0) return null
+  // Don't render until localStorage is read — prevents flash redirect on mount
+  if (!isHydrated || items.length === 0) return null
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()

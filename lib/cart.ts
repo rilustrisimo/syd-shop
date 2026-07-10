@@ -20,9 +20,11 @@ function writeCart(items: CartItem[]) {
 
 export function useCart() {
   const [items, setItems] = useState<CartItem[]>([])
+  const [isHydrated, setIsHydrated] = useState(false)
 
   useEffect(() => {
     setItems(readCart())
+    setIsHydrated(true)
 
     // Sync across tabs
     const onStorage = (e: StorageEvent) => {
@@ -73,5 +75,5 @@ export function useCart() {
   const subtotal = items.reduce((sum, i) => sum + i.unit_price * i.quantity, 0)
   const itemCount = items.reduce((sum, i) => sum + i.quantity, 0)
 
-  return { items, itemCount, subtotal, addItem, updateQuantity, removeItem, clearCart }
+  return { items, itemCount, subtotal, addItem, updateQuantity, removeItem, clearCart, isHydrated }
 }
