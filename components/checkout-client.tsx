@@ -7,7 +7,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { MapPin, AlertTriangle, CheckCircle, Upload, X, ArrowLeft, Package } from 'lucide-react'
 import { useCart } from '@/lib/cart'
-import { calcDelivery } from '@/lib/haversine'
+import { calcFeeFromDistance } from '@/lib/haversine'
+import { getRoadDistance } from '@/lib/routing'
 import { formatPrice } from '@/components/currency'
 import { submitOrder } from '@/app/checkout/actions'
 import type { ShopSettings, FulfillmentType, PaymentMethod, DeliveryCalc } from '@/lib/types'
@@ -63,21 +64,42 @@ export function CheckoutClient({ settings }: CheckoutClientProps) {
   const [referenceNo, setReferenceNo] = useState('')
   const [proofFile, setProofFile] = useState<File | null>(null)
   const [notes, setNotes] = useState('')
+  const [deliveryLoading, setDeliveryLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const proofInputRef = useRef<HTMLInputElement>(null)
+  const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (fulfillment !== 'delivery' || pinLat == null || pinLng == null) {
       setDeliveryCalc(null)
+      setDeliveryLoading(false)
+      abortRef.current?.abort()
       return
     }
-    const calc = calcDelivery(pinLat, pinLng, settings)
-    setDeliveryCalc(calc)
-    if (!calc.cod_available && paymentMethod === 'cod') {
-      setPaymentMethod('gcash')
-    }
+
+    // Cancel any in-flight OSRM request from a previous pin position
+    abortRef.current?.abort()
+    const ctrl = new AbortController()
+    abortRef.current = ctrl
+
+    setDeliveryLoading(true)
+
+    getRoadDistance(settings.store_latitude, settings.store_longitude, pinLat, pinLng, ctrl.signal)
+      .then(({ distance_km, road_based }) => {
+        const calc = calcFeeFromDistance(distance_km, settings, road_based)
+        setDeliveryCalc(calc)
+        setDeliveryLoading(false)
+        if (!calc.cod_available && paymentMethod === 'cod') {
+          setPaymentMethod('gcash')
+        }
+      })
+      .catch(err => {
+        if (err?.name !== 'AbortError') setDeliveryLoading(false)
+      })
+
+    return () => ctrl.abort()
   }, [pinLat, pinLng, fulfillment, settings])
 
   useEffect(() => {
@@ -225,21 +247,31 @@ export function CheckoutClient({ settings }: CheckoutClientProps) {
                     pinLat={pinLat}
                     pinLng={pinLng}
                   />
-                  {deliveryCalc ? (
-                    <div className={`flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium ${
+                  {deliveryLoading ? (
+                    <div className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm text-slate-500 bg-slate-50 border border-slate-200 animate-pulse">
+                      <MapPin className="w-4 h-4 flex-shrink-0" />
+                      <span>Calculating road distance...</span>
+                    </div>
+                  ) : deliveryCalc ? (
+                    <div className={`rounded-lg px-4 py-3 text-sm font-medium ${
                       deliveryCalc.cod_available
                         ? 'bg-green-50 text-green-800 border border-green-200'
                         : 'bg-amber-50 text-amber-800 border border-amber-200'
                     }`}>
-                      <MapPin className="w-4 h-4 flex-shrink-0" />
-                      <span>
-                        <strong>{deliveryCalc.distance_km} km</strong> from store
-                        {' · '}
-                        Delivery fee: <strong>{formatPrice(deliveryCalc.delivery_fee)}</strong>
-                        {deliveryCalc.cod_available
-                          ? ' · ✅ COD available'
-                          : ' · 💳 COD not available at this distance'}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-4 h-4 flex-shrink-0" />
+                        <span>
+                          <strong>{deliveryCalc.distance_km} km</strong> from store
+                          {' · '}
+                          Delivery fee: <strong>{formatPrice(deliveryCalc.delivery_fee)}</strong>
+                          {deliveryCalc.cod_available
+                            ? ' · ✅ COD available'
+                            : ' · 💳 COD not available at this distance'}
+                        </span>
+                      </div>
+                      <p className="text-xs mt-1 opacity-60 pl-6">
+                        {deliveryCalc.road_based ? '🛣️ Road distance via OpenStreetMap' : '📏 Straight-line estimate (no road data)'}
+                      </p>
                     </div>
                   ) : (
                     <p className="text-xs text-slate-400 text-center py-1">Tap on the map to pin your delivery location</p>

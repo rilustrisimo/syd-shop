@@ -252,7 +252,7 @@ export default function ProductDetailPage() {
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
                     <p className="text-base">🚚</p>
                     <p className="text-xs font-semibold text-slate-700 mt-1">Home Delivery</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">₱50 within 5km</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">₱50 within 3km</p>
                   </div>
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
                     <p className="text-base">🏪</p>

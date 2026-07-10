@@ -2,7 +2,8 @@
 
 import { createServerClient } from '@/lib/supabase/server'
 import { getShopSettings } from '@/lib/supabase/queries/shop-settings'
-import { calcDelivery } from '@/lib/haversine'
+import { calcFeeFromDistance } from '@/lib/haversine'
+import { getRoadDistance } from '@/lib/routing'
 import { Resend } from 'resend'
 import type { CartItem, FulfillmentType, PaymentMethod } from '@/lib/types'
 
@@ -63,7 +64,8 @@ export async function submitOrder(
   let cod_available = true
 
   if (fulfillment === 'delivery' && pinLat != null && pinLng != null) {
-    const calc = calcDelivery(pinLat, pinLng, settings)
+    const road = await getRoadDistance(settings.store_latitude, settings.store_longitude, pinLat, pinLng)
+    const calc = calcFeeFromDistance(road.distance_km, settings, road.road_based)
     distance_km = calc.distance_km
     delivery_fee = calc.delivery_fee
     cod_available = calc.cod_available

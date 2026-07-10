@@ -15,24 +15,30 @@ export function haversineKm(
   return R * 2 * Math.asin(Math.sqrt(a))
 }
 
+type FeeSettings = Pick<ShopSettings, 'cod_radius_km' | 'delivery_fee_flat' | 'delivery_fee_per_km'>
+
+/** Convert a known distance into a DeliveryCalc result. Used by both sync (Haversine) and async (OSRM) paths. */
+export function calcFeeFromDistance(
+  distance_km: number,
+  settings: FeeSettings,
+  road_based = false
+): DeliveryCalc {
+  const cod_available = distance_km <= settings.cod_radius_km
+  const delivery_fee = cod_available
+    ? settings.delivery_fee_flat
+    : Math.round(settings.delivery_fee_per_km * distance_km)
+  return { distance_km, delivery_fee, cod_available, road_based }
+}
+
+/** Synchronous Haversine-based calculation — used as a fallback when OSRM is unavailable. */
 export function calcDelivery(
   customerLat: number,
   customerLng: number,
   settings: Pick<ShopSettings, 'store_latitude' | 'store_longitude' | 'cod_radius_km' | 'delivery_fee_flat' | 'delivery_fee_per_km'>
 ): DeliveryCalc {
-  const distance_km = haversineKm(
+  const raw_km = haversineKm(
     settings.store_latitude, settings.store_longitude,
     customerLat, customerLng
   )
-
-  const cod_available = distance_km <= settings.cod_radius_km
-  const delivery_fee = cod_available
-    ? settings.delivery_fee_flat
-    : Math.round(settings.delivery_fee_per_km * distance_km)
-
-  return {
-    distance_km: Math.round(distance_km * 10) / 10,
-    delivery_fee,
-    cod_available,
-  }
+  return calcFeeFromDistance(Math.round(raw_km * 10) / 10, settings, false)
 }

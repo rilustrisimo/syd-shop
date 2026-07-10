@@ -65,4 +65,5 @@ export interface DeliveryCalc {
   distance_km: number
   delivery_fee: number
   cod_available: boolean
+  road_based?: boolean  // true = OSRM road distance, false = straight-line Haversine fallback
 }
