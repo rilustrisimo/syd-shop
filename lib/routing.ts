@@ -6,7 +6,8 @@ const OSRM = 'https://router.project-osrm.org/route/v1/driving'
 
 export interface RoadDistanceResult {
   distance_km: number
-  road_based: boolean  // false = Haversine fallback (no road data or network error)
+  road_based: boolean           // false = Haversine fallback (no road data or network error)
+  routeCoords?: [number, number][]  // [lat, lng] pairs for drawing the route on a map (only when road_based)
 }
 
 /**
@@ -26,13 +27,22 @@ export async function getRoadDistance(
   signal?: AbortSignal
 ): Promise<RoadDistanceResult> {
   try {
-    const url = `${OSRM}/${fromLng},${fromLat};${toLng},${toLat}?overview=false&alternatives=false`
+    // overview=full + geometries=geojson returns the route shape as a GeoJSON LineString
+    const url = `${OSRM}/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson&alternatives=false`
     const res = await fetch(url, { signal, cache: 'no-store' })
     if (!res.ok) throw new Error(`OSRM HTTP ${res.status}`)
     const data = await res.json()
     if (data.code !== 'Ok' || !data.routes?.[0]) throw new Error('No route')
-    const km = data.routes[0].distance / 1000
-    return { distance_km: Math.round(km * 10) / 10, road_based: true }
+
+    const route = data.routes[0]
+    const km = route.distance / 1000
+
+    // GeoJSON coordinates are [lng, lat] — flip to [lat, lng] for Leaflet
+    const routeCoords: [number, number][] = (route.geometry?.coordinates ?? []).map(
+      ([lng, lat]: [number, number]) => [lat, lng]
+    )
+
+    return { distance_km: Math.round(km * 10) / 10, road_based: true, routeCoords }
   } catch (err: any) {
     // Re-throw aborts so callers can tell the request was cancelled
     if (err?.name === 'AbortError') throw err

@@ -9,15 +9,18 @@ interface DeliveryMapProps {
   onPin: (lat: number, lng: number) => void
   pinLat?: number | null
   pinLng?: number | null
+  routeCoords?: [number, number][] | null  // [lat, lng] pairs — drawn as a blue polyline
 }
 
-export function DeliveryMap({ storeLat, storeLng, onPin, pinLat, pinLng }: DeliveryMapProps) {
+export function DeliveryMap({ storeLat, storeLng, onPin, pinLat, pinLng, routeCoords }: DeliveryMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<any>(null)
   const customerMarkerRef = useRef<any>(null)
+  const routeLayerRef = useRef<any>(null)
   const onPinRef = useRef(onPin)
   onPinRef.current = onPin
 
+  // Initialize map once
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
 
@@ -37,9 +40,9 @@ export function DeliveryMap({ storeLat, storeLng, onPin, pinLat, pinLng }: Deliv
 
       const storeIcon = L.divIcon({
         className: '',
-        html: '<div style="background:#f97316;width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.5)"></div>',
-        iconSize: [14, 14],
-        iconAnchor: [7, 7],
+        html: '<div style="background:#ffc107;width:16px;height:16px;border-radius:50%;border:2.5px solid #0f172a;box-shadow:0 1px 4px rgba(0,0,0,.5)"></div>',
+        iconSize: [16, 16],
+        iconAnchor: [8, 8],
       })
 
       const map = L.map(containerRef.current!).setView([storeLat, storeLng], 14)
@@ -48,7 +51,9 @@ export function DeliveryMap({ storeLat, storeLng, onPin, pinLat, pinLng }: Deliv
         maxZoom: 19,
       }).addTo(map)
 
-      L.marker([storeLat, storeLng], { icon: storeIcon, interactive: false }).addTo(map)
+      L.marker([storeLat, storeLng], { icon: storeIcon, interactive: false })
+        .bindTooltip('Store', { permanent: false, direction: 'top' })
+        .addTo(map)
 
       function placePin(lat: number, lng: number) {
         if (customerMarkerRef.current) {
@@ -83,8 +88,50 @@ export function DeliveryMap({ storeLat, storeLng, onPin, pinLat, pinLng }: Deliv
       mapRef.current?.remove()
       mapRef.current = null
       customerMarkerRef.current = null
+      routeLayerRef.current = null
     }
   }, [storeLat, storeLng])
 
-  return <div ref={containerRef} className="w-full h-56 rounded-xl overflow-hidden" style={{ zIndex: 0 }} />
+  // Draw / update route polyline whenever routeCoords changes
+  useEffect(() => {
+    if (!mapRef.current) return
+
+    import('leaflet').then(({ default: L }) => {
+      if (!mapRef.current) return
+
+      // Remove old route
+      if (routeLayerRef.current) {
+        routeLayerRef.current.remove()
+        routeLayerRef.current = null
+      }
+
+      if (!routeCoords || routeCoords.length < 2) return
+
+      // Draw the route as a solid blue line with a slightly wider white shadow for contrast
+      const shadow = L.polyline(routeCoords, {
+        color: '#ffffff',
+        weight: 9,
+        opacity: 0.5,
+        lineJoin: 'round',
+        lineCap: 'round',
+      }).addTo(mapRef.current)
+
+      const line = L.polyline(routeCoords, {
+        color: '#2563eb',
+        weight: 5,
+        opacity: 0.85,
+        lineJoin: 'round',
+        lineCap: 'round',
+      }).addTo(mapRef.current)
+
+      // Group both layers so we can remove them together
+      routeLayerRef.current = { remove: () => { shadow.remove(); line.remove() } }
+
+      // Fit map to show the full route with some padding
+      const bounds = L.latLngBounds(routeCoords)
+      mapRef.current.fitBounds(bounds, { padding: [48, 48] })
+    })
+  }, [routeCoords])
+
+  return <div ref={containerRef} className="w-full h-64 rounded-xl overflow-hidden" style={{ zIndex: 0 }} />
 }

@@ -60,6 +60,7 @@ export function CheckoutClient({ settings }: CheckoutClientProps) {
   const [pinLat, setPinLat] = useState<number | null>(null)
   const [pinLng, setPinLng] = useState<number | null>(null)
   const [deliveryCalc, setDeliveryCalc] = useState<DeliveryCalc | null>(null)
+  const [routeCoords, setRouteCoords] = useState<[number, number][] | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod')
   const [referenceNo, setReferenceNo] = useState('')
   const [proofFile, setProofFile] = useState<File | null>(null)
@@ -74,6 +75,7 @@ export function CheckoutClient({ settings }: CheckoutClientProps) {
   useEffect(() => {
     if (fulfillment !== 'delivery' || pinLat == null || pinLng == null) {
       setDeliveryCalc(null)
+      setRouteCoords(null)
       setDeliveryLoading(false)
       abortRef.current?.abort()
       return
@@ -87,9 +89,10 @@ export function CheckoutClient({ settings }: CheckoutClientProps) {
     setDeliveryLoading(true)
 
     getRoadDistance(settings.store_latitude, settings.store_longitude, pinLat, pinLng, ctrl.signal)
-      .then(({ distance_km, road_based }) => {
+      .then(({ distance_km, road_based, routeCoords: coords }) => {
         const calc = calcFeeFromDistance(distance_km, settings, road_based)
         setDeliveryCalc(calc)
+        setRouteCoords(coords ?? null)
         setDeliveryLoading(false)
         if (!calc.cod_available && paymentMethod === 'cod') {
           setPaymentMethod('gcash')
@@ -246,6 +249,7 @@ export function CheckoutClient({ settings }: CheckoutClientProps) {
                     onPin={(lat, lng) => { setPinLat(lat); setPinLng(lng) }}
                     pinLat={pinLat}
                     pinLng={pinLng}
+                    routeCoords={routeCoords}
                   />
                   {deliveryLoading ? (
                     <div className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm text-slate-500 bg-slate-50 border border-slate-200 animate-pulse">
