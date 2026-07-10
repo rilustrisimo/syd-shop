@@ -1,0 +1,516 @@
+# SYD Hardware E-Commerce Online Shop
+
+## Context
+The goal is to build a customer-facing online shop for the hardware business, using the existing Supabase database as the source of truth for products and inventory. Customers should be able to browse, add to cart, and check out with minimal friction. Province-focused setup: mobile-first, COD-preferred, simple UX, no WooCommerce bloat.
+
+---
+
+## Recommended Architecture
+
+### Storefront: Next.js `syd-shop` — hosted on Railway (NOT Vercel)
+**Why not Vercel for the shop:** Vercel Hobby is intended for personal projects — a commercial e-commerce store should be on Vercel Pro ($20/month). Since the shop will serve public customers, that's the honest line. **However**, the shop frontend itself is mostly static (HTML/JS/CSS) with very few serverless calls, making it a great fit for Railway ($5/month) or Render ($7/month) — no commercial restrictions, no per-function billing.
+
+**Split deployment strategy:**
+- `syd-pos` (existing) → stays on current Vercel plan, completely untouched. Staff-only internal POS.
+- `syd-shop` (new) → deploys on **Railway** ($5/month). Makes **direct Supabase calls** — bypasses Vercel entirely. Zero additional Vercel function invocations.
+- Product images → served from **Supabase Storage directly**. Zero Vercel bandwidth.
+
+**Why direct Supabase, not through syd-pos API routes:**
+- No `/api/v1/` routes needed in syd-pos at all — less code, no CORS config, no Vercel usage
+- syd-shop server-side route handlers (running on Railway) use the **Supabase service role key** for writes (order creation, proof upload) — key stays server-side, never reaches the browser
+- syd-shop server components use the **anon key** for reads (products, categories, inventory) — controlled by RLS policies
+- syd-pos Vercel remains purely the internal POS — no shop traffic touches it
+
+This keeps Vercel costs completely unchanged and adds only ~$5/month for the shop.
+
+**Why Next.js over WordPress:** Same stack, deploys in minutes, full control over the custom checkout UX.
+
+---
+
+## Key Constraints
+
+- **Existing POS tables are read-only** — no new columns, no schema changes to `products`, `branches`, `branch_inventory`, etc.
+- **New shop-specific tables** live in the same Supabase project (same DB, new tables only). This gives real-time inventory without any sync overhead.
+- **Domains:** `sydconstruct.com` → shop (Railway), `app.sydconstruct.com` → POS (Vercel)
+- **No homepage** — `sydconstruct.com` lands directly on the product catalog. The catalog IS the experience.
+
+## What Existing Tables the Shop Reads (read-only)
+
+| Table | What the shop uses |
+|-------|-------------------|
+| `products` | `id`, `code`, `name`, `description`, `current_selling_price`, `is_active` |
+| `product_images` | `url`, `is_primary`, `sort_order` — images already in Supabase Storage |
+| `product_categories` | `name` for filters |
+| `product_subcategories` | `name` for sub-filters |
+| `branch_inventory` | `quantity_on_hand` — live stock level |
+| `units_of_measure` | `code` — shown on product cards (e.g., "per bag", "per pc") |
+
+No existing tables are modified.
+
+## New Shop-Specific Tables (same Supabase project)
+
+### `shop_settings` — store config (single row)
+```sql
+id                uuid PRIMARY KEY DEFAULT gen_random_uuid()
+store_name        TEXT NOT NULL
+store_phone       TEXT
+store_address     TEXT
+store_latitude    NUMERIC(10,7) NOT NULL  -- for COD 5km check
+store_longitude   NUMERIC(10,7) NOT NULL
+gcash_number      TEXT           -- shown to customer at checkout
+gcash_name        TEXT
+bank_name         TEXT
+bank_account_no   TEXT
+bank_account_name TEXT
+qr_code_url       TEXT           -- uploaded QR image URL
+store_hours                  TEXT    -- e.g. "Mon–Sat 7AM–6PM" — shown on order confirmation page
+staff_notification_emails    TEXT    -- comma-separated, e.g. "owner@email.com,staff@email.com"
+delivery_fee_flat      NUMERIC(8,2) DEFAULT 50    -- flat fee for ≤cod_radius_km (e.g. ₱50)
+delivery_fee_per_km    NUMERIC(8,2) DEFAULT 30    -- rate per km when distance > cod_radius_km (e.g. ₱30/km)
+cod_radius_km          NUMERIC(4,1) DEFAULT 5     -- also the boundary between flat fee and per-km rate
+created_at        TIMESTAMPTZ DEFAULT NOW()
+updated_at        TIMESTAMPTZ DEFAULT NOW()
+```
+
+### `shop_product_overrides` — per-product shop visibility
+```sql
+id             uuid PRIMARY KEY DEFAULT gen_random_uuid()
+product_id     uuid NOT NULL REFERENCES products(id) ON DELETE CASCADE
+hidden_online  BOOLEAN NOT NULL DEFAULT FALSE  -- TRUE = don't show in shop
+created_at     TIMESTAMPTZ DEFAULT NOW()
+updated_at     TIMESTAMPTZ DEFAULT NOW()
+UNIQUE (product_id)
+```
+All active products default to visible. Staff can hide individual products without touching the POS `products` table.
+
+### `online_orders`
+
+**Order number auto-generation** — uses a PostgreSQL sequence so concurrent orders never collide:
+```sql
+CREATE SEQUENCE online_order_number_seq START 1;
+
+-- order_number generated by trigger: 'SYD-' || LPAD(nextval('online_order_number_seq')::text, 4, '0')
+-- e.g. SYD-0001, SYD-0002, ... SYD-9999, SYD-10000
+```
+
+```sql
+id             uuid PRIMARY KEY DEFAULT gen_random_uuid()
+order_number   TEXT UNIQUE NOT NULL DEFAULT ''  -- set by trigger before insert
+status         TEXT NOT NULL DEFAULT 'pending'
+               -- pending | confirmed | preparing | out_for_delivery | delivered | cancelled
+fulfillment    TEXT NOT NULL              -- 'delivery' | 'pickup'
+customer_name  TEXT NOT NULL
+customer_phone TEXT NOT NULL
+address        TEXT                       -- NULL for pickup orders
+barangay       TEXT
+municipality   TEXT
+province       TEXT
+latitude       NUMERIC(10,7)              -- customer's pinned location
+longitude      NUMERIC(10,7)
+distance_km    NUMERIC(6,2)              -- calculated at order time
+payment_method TEXT NOT NULL             -- 'cod' | 'gcash' | 'bank_transfer' | 'qr'
+payment_status TEXT NOT NULL DEFAULT 'unpaid'  -- unpaid | submitted | verified | refunded
+payment_proof_url    TEXT               -- screenshot upload URL
+payment_reference_no TEXT               -- reference number entered by customer
+subtotal       NUMERIC(12,2) NOT NULL
+delivery_fee   NUMERIC(8,2) NOT NULL DEFAULT 0
+total_amount   NUMERIC(12,2) NOT NULL
+notes          TEXT
+customer_id    UUID REFERENCES customers(id)      -- matched or newly created on order submission
+transaction_id UUID REFERENCES transactions(id)  -- set when staff creates the POS sale for this order
+created_at     TIMESTAMPTZ DEFAULT NOW()
+updated_at     TIMESTAMPTZ DEFAULT NOW()
+```
+
+### `online_order_lines`
+```sql
+id           uuid PRIMARY KEY DEFAULT gen_random_uuid()
+order_id     uuid NOT NULL REFERENCES online_orders(id) ON DELETE CASCADE
+product_id   uuid REFERENCES products(id)   -- nullable (product could be deleted later)
+product_code TEXT NOT NULL                  -- snapshot
+product_name TEXT NOT NULL                  -- snapshot
+unit_label   TEXT NOT NULL                  -- e.g. "per bag" (snapshot)
+unit_price   NUMERIC(12,2) NOT NULL         -- snapshot at order time
+quantity     NUMERIC(10,2) NOT NULL
+line_total   NUMERIC(12,2) NOT NULL
+```
+
+### RLS policies
+- `shop_settings`: public SELECT (shop needs to read store coords/payment info), no public write
+- `shop_product_overrides`: public SELECT (shop reads which products are hidden), no public write
+- `online_orders`: public INSERT (to place orders), SELECT restricted to `authenticated` only (POS staff)
+- `online_order_lines`: public INSERT via order placement, SELECT restricted to `authenticated`
+
+## Auto-Compression — Already Implemented
+
+`compressImage()` already exists in [src/lib/supabase/storage/product-images.ts](syd-pos/src/lib/supabase/storage/product-images.ts) and is called automatically before every upload in [product-image-upload.tsx](syd-pos/src/components/products/product-image-upload.tsx). Works on both "Choose File" and "Take Photo" (camera capture on mobile).
+
+Current settings: max 1200×1200px, 85% quality → typical output ~200–400KB per photo.
+
+**One small improvement to make:** Tighten defaults to stay reliably under 150KB without visible quality loss on hardware product photos:
+- Change `maxWidth`/`maxHeight`: 1200 → 1000px
+- Change `quality`: 0.85 → 0.75
+- Result: typical mobile product photo → ~80–150KB
+
+One-line change to the `compressImage()` defaults in [product-images.ts](syd-pos/src/lib/supabase/storage/product-images.ts#L232). No UI changes needed.
+
+---
+
+**No existing API routes** (only `/api/print` and `/api/qz/*` for thermal printing).
+
+---
+
+## Phase 1 — syd-shop Supabase Integration (on Railway, no Vercel involved)
+
+All data access happens server-side in syd-shop's Next.js route handlers and server components on Railway.
+
+### Read operations (anon key, RLS-controlled)
+```
+Products query:
+  FROM products p
+  LEFT JOIN shop_product_overrides spo ON spo.product_id = p.id
+  LEFT JOIN product_images pi ON pi.product_id = p.id AND pi.is_primary = true
+  LEFT JOIN product_categories pc ON pc.id = p.category_id
+  LEFT JOIN branch_inventory bi ON bi.product_id = p.id AND bi.branch_id = <main_branch_id from shop_settings>
+  LEFT JOIN units_of_measure uom ON uom.id = p.selling_uom_id
+  WHERE p.is_active = true AND (spo.hidden_online IS NULL OR spo.hidden_online = false)
+```
+- `quantity_on_hand` from `branch_inventory` for the **main branch** (stored in `shop_settings.branch_id`)
+- `in_stock = quantity_on_hand > 0` — out-of-stock products are **shown** with "Out of Stock" badge, not hidden
+- Client-side filter `?in_stock=true` available for customers who only want available items
+- When a second branch is added, update `shop_settings.branch_id` — no code change needed
+
+### Write operations (service role key, server-side only in Railway)
+
+**Customer matching on order submission:**
+1. Normalize the phone number entered at checkout (strip non-digits, standardize to `09XXXXXXXXX` format)
+2. Look up `customers` WHERE `phone = normalized_phone` (uses service role — anon can't read customers)
+3. **Match found** → use existing `customer_id`, optionally update `name` if it changed
+4. **No match** → INSERT new customer:
+   - `name` = customer_name from checkout
+   - `phone` = normalized_phone
+   - `address` = "Barangay X, Municipality, Province" constructed from checkout fields
+   - `customer_type` = `'walk_in'` (default for online customers; staff can upgrade later)
+   - `credit_limit` = 0, `outstanding_balance` = 0, `is_active` = true
+5. INSERT `online_orders` with `customer_id` linked to the matched or newly created customer
+
+This means online shop customers appear in the POS customer list automatically. Staff can look up a customer's order history across both in-store and online.
+
+Other write operations:
+- Payment proof upload: Railway server route handler → Supabase Storage `payment-proofs` bucket → update `online_orders.payment_proof_url`
+- Service role key lives in Railway env vars only, never sent to the browser
+
+### Shop settings read (anon, public SELECT via RLS)
+`shop_settings` readable by anon — returns store name, phone, address, GCash/bank/QR details, delivery fee, COD radius.
+`store_latitude` and `store_longitude` excluded from the public query — used only in the server-side Haversine COD check.
+
+### Delivery fee calculation (server-side on Railway, also runs live on client for UX)
+
+**Formula (using `shop_settings` values):**
+```
+distance_km = haversine(store_lat, store_lng, customer_lat, customer_lng)
+
+if distance_km <= cod_radius_km:
+  delivery_fee = delivery_fee_flat        -- e.g. ₱50
+  cod_available = true
+else:
+  delivery_fee = delivery_fee_per_km × distance_km   -- e.g. ₱30 × 8km = ₱240
+  cod_available = false
+```
+
+**Live client-side preview:** As the customer drags their pin on the map, the delivery fee updates in real-time (client-side Haversine using the store coords from `shop_settings`). The fee shown is a preview — the authoritative calculation runs server-side at order submission to prevent tampering.
+
+**Stored on the order:** `online_orders.distance_km` and `online_orders.delivery_fee` are both set at submission time using the server-side result, not whatever the client showed.
+
+### RLS policies needed
+| Table | Anon can | Authenticated (staff) can |
+|-------|----------|--------------------------|
+| `products` | SELECT (is_active = true) | full access (existing) |
+| `product_images` | SELECT | full access (existing) |
+| `product_categories` | SELECT (is_active = true) | full access (existing) |
+| `product_subcategories` | SELECT (is_active = true) | full access (existing) |
+| `branch_inventory` | SELECT | full access (existing) |
+| `units_of_measure` | SELECT | full access (existing) |
+| `shop_settings` | SELECT | full access |
+| `shop_product_overrides` | SELECT | full access |
+| `online_orders` | INSERT only | SELECT + UPDATE |
+| `online_order_lines` | INSERT only | SELECT |
+
+---
+
+## Phase 3 — Storefront (Next.js `syd-shop`)
+
+### New repo: `syd-shop` — Next.js on Railway
+
+**Landing page IS the catalog** — `sydconstruct.com` opens directly to:
+```
+┌─────────────────────────────────────────┐
+│  SYD Construction Supplies              │
+│  [Search: Search for products...]  [🛒2]│
+├─────────────────────────────────────────┤
+│  [All] [Cement] [Paint] [Electrical]... │  ← category pill filters
+├─────────────────────────────────────────┤
+│  [img]     [img]     [img]              │
+│  Portland   Hollow    Flat Latex        │  ← 2-col product grid on mobile
+│  Cement     Blocks    Paint             │
+│  ₱280/bag  ₱18/pc   ₱450/gal          │
+│  [+ Add]   [+ Add]  [+ Add]            │
+│  ...                                    │
+└─────────────────────────────────────────┘
+  [🛒 2 items — ₱560  |  View Cart →]    ← sticky bottom bar
+```
+No homepage. No hero banner. Customer lands and immediately sees products to buy.
+
+Key routes:
+| Route | Purpose |
+|-------|---------|
+| `/` | Catalog — search, category filters, product grid (this IS the homepage) |
+| `/products/[id]` | Product detail: image gallery, description, unit, stock, Add to Cart |
+| `/cart` | Cart review with quantity controls, subtotal, proceed to checkout |
+| `/checkout` | Single-page checkout (see flow below) |
+| `/order/[orderNumber]` | Order confirmation + status page |
+
+### Checkout flow (single long-scroll page, mobile-friendly)
+```
+1. Contact Info
+   ○ Name (required)
+   ○ Phone number (required) → validated PH format
+
+2. Delivery Address
+   ○ House/Building no. + Street
+   ○ Barangay (required)
+   ○ Municipality/City (required)
+   ○ Province (auto-filled)
+
+3. Pin Your Exact Delivery Location on Map
+   ○ Leaflet + OpenStreetMap (free, no API key needed)
+   ○ Map auto-centers on customer's GPS location (with permission) as a starting point
+   ○ Tap anywhere to place pin, draggable to fine-tune
+   ○ Warning banner (always visible while on this step):
+       ⚠️ "Pin your exact location. We will only deliver to the pinned location,
+           and your delivery fee is calculated based on this pin."
+   ○ Live feedback updates as pin moves:
+       📍 "X.X km from our store"
+       🚚 "Delivery fee: ₱XX"
+       ✅ "Cash on Delivery available" (if ≤5km) OR
+       💳 "COD not available at this distance — online payment required" (if >5km)
+   ○ Customer cannot proceed to payment step without placing a pin
+
+4. Payment Method
+   ○ [Cash on Delivery]   — delivery within 5km, OR pickup always
+   ○ [GCash]              — store GCash number + QR shown; customer enters ref no. + uploads proof
+   ○ [Bank Transfer]      — store account details shown; same proof upload flow
+   ○ [QR Code]            — store QR shown; customer scans + uploads proof
+
+5. Order Summary + Place Order
+   ○ Cart items, subtotal
+   ○ Delivery fee line: "Delivery (X.X km) — ₱XX"
+   ○ Total
+   ○ Delivery address reminder: shows the pinned address + small static map thumbnail
+   ○ Notice above the button (always visible):
+     "Your order will be delivered to your pinned location. Make sure your pin is accurate."
+   ○ "After placing your order, our staff will contact you at the number you provided
+      to confirm your order and arrange delivery or pickup."
+```
+
+**Order confirmation page (`/order/[orderNumber]`):**
+```
+✓ Order Placed! — SYD-0001
+
+What happens next:
+  📞 Our staff will call or text you at [customer phone] to confirm your order.
+  🕐 We'll reach out during business hours: [store hours from shop_settings].
+  📦 Once confirmed, we'll prepare your order for [delivery / pickup].
+
+  Questions? Contact us: [store_phone]
+```
+This sets the right expectation: the order is a request, not an instant fulfilment. Staff will confirm before anything is prepared or delivered.
+
+### Map: OpenStreetMap + Leaflet
+- Zero cost, no API key required
+- `leaflet` + `react-leaflet` npm packages
+- Only shown when fulfillment = Delivery (pickup orders skip map + delivery fee steps entirely)
+- Client-side Haversine gives live distance + fee preview as pin moves
+- Server-side Haversine at order submission is authoritative — client value is display only
+- Store coordinates come from `shop_settings` read at page load (server component)
+- Map defaults to customer's GPS location via browser geolocation API as a helpful starting point; customer must still manually confirm/adjust the pin
+
+### Payment: Manual proof approach (no payment gateway needed)
+- COD: always for pickup; delivery only within `cod_radius_km` from store (from `shop_settings`)
+- GCash / Bank Transfer / QR: show store's payment details fetched from `shop_settings`
+- Customer enters reference number + uploads proof screenshot
+- Proof stored in Supabase Storage (`payment-proofs` bucket)
+- Staff sees proof in POS order dashboard and manually marks payment "Verified"
+
+---
+
+## Phase 4 — Order Management in POS Dashboard
+
+New page in syd-pos: `src/app/(dashboard)/orders/online/page.tsx`
+
+**Order list:** Table with status badge, customer name, total, fulfillment type, payment method, date. Unread/new orders highlighted.
+
+**Order detail:**
+- Customer info: name, phone — with a link to the matched customer record (`/customers/[id]`)
+- Badge: "Returning Customer" or "New Customer"
+- Address + map pin preview (static Leaflet thumbnail), delivery distance + fee
+- Payment proof screenshot (viewable inline if submitted)
+- Editable line items (see below)
+- Status controls
+
+**Edit Order Request (before converting):**
+- Staff can adjust items and quantities directly on the order detail page before converting to a sale
+- Use case: customer asks to add/remove items when staff calls to confirm
+- Editable fields: quantity per line, remove a line, add a new product (search box)
+- Changes are saved back to `online_order_lines` — the order record reflects what was actually agreed
+- A log note is added (e.g., "Staff adjusted: Qty of Portland Cement changed from 5 to 3 bags")
+
+**"Convert to Sale" button — one-click fulfillment:**
+- Clicking the button navigates to the existing POS screen: `/dashboard/pos?from_order=<online_order_id>`
+- The POS page detects the `from_order` param, fetches the online order, and **pre-fills:**
+  - Customer → the linked customer record
+  - Cart items → all `online_order_lines` items at their saved prices and quantities
+- Staff reviews the pre-filled cart (can still make final adjustments in POS if needed)
+- Staff processes the transaction normally (handles payment method, discounts, etc.)
+- On successful transaction completion, the POS **automatically:**
+  - Sets `online_orders.transaction_id = new_transaction_id`
+  - Sets `online_orders.status = 'delivered'` (delivery) or `'picked_up'` (pickup)
+  - No manual "Mark as Fulfilled" step needed
+
+**Why this approach:**
+- Zero manual re-entry — one button pre-fills everything
+- Reuses the existing proven transaction/inventory flow entirely
+- Staff can still edit the pre-filled cart in POS before finalizing (discounts, substitutions)
+- Cancelled orders leave zero trace in inventory or revenue
+- Auto-fulfillment on transaction complete removes the risk of forgetting to update the order
+
+---
+
+## Phase 5 — New Order Notifications
+
+### Real-time bell notification in POS (all pages, including frontline)
+
+Uses **Supabase Realtime** — subscribes to `INSERT` events on `online_orders`. No polling. No cron job needed.
+
+**Implementation:**
+- `<OrderNotificationListener />` — a client component that subscribes to `supabase.channel('online_orders')` on mount
+- Mounted in **both** the dashboard layout (`src/app/(dashboard)/layout.tsx`) AND the frontline layout (`src/app/(frontline)/layout.tsx`)
+- On new order received:
+  1. **Bell sound** — plays a `.mp3` notification sound via the HTML5 Audio API
+  2. **Toast notification** — appears on screen: "New Online Order — SYD-0042 from Juan dela Cruz · ₱850 · Delivery"
+  3. **Navigation badge** — a red dot / count badge appears on the "Online Orders" nav link until the order is viewed
+  4. The notification persists (doesn't auto-dismiss) until staff taps/clicks it
+
+**Frontline POS:** Same `<OrderNotificationListener />` mounted in the frontline layout. Bell + toast + badge appear there too.
+
+**Sound file:** A short, clear bell chime (`.mp3`, ~50KB). Stored in `syd-pos/public/sounds/new-order.mp3`.
+
+### Email notification to staff on new order
+
+Triggered from the **syd-shop Railway server action** immediately after successful order INSERT — no Edge Function or webhook needed.
+
+**Email service:** [Resend](https://resend.com) — free tier: 3,000 emails/month, 100/day. Simple REST API, reliable deliverability.
+
+**Email content:**
+```
+Subject: New Online Order — SYD-0042
+
+New order received!
+
+Customer: Juan dela Cruz · 09171234567
+Order: SYD-0042 · ₱850 total
+Fulfillment: Delivery (3.2 km · ₱50 delivery fee)
+Payment: GCash (proof submitted)
+
+Items:
+  • Portland Cement × 5 bags — ₱1,400
+  • Hollow Blocks × 20 pcs — ₱360
+
+View order: https://app.sydconstruct.com/orders/online/[order_id]
+```
+
+**Staff email addresses** stored in `shop_settings` as a comma-separated field:
+```sql
+staff_notification_emails TEXT  -- e.g. "owner@email.com,staff@email.com"
+```
+
+**Resend env var on Railway:** `RESEND_API_KEY=re_xxxx`
+
+---
+
+## Files to Create / Modify
+
+### In `syd-pos` (existing workspace) — minimal changes
+| Path | Change |
+|------|--------|
+| `supabase/migrations/000XX_shop_tables.sql` | New tables + sequence + trigger for order_number + `payment-proofs` bucket policy + RLS policies |
+| `src/app/(dashboard)/orders/online/page.tsx` | New — online order list + detail + edit + Convert to Sale button |
+| `src/app/(dashboard)/pos/page.tsx` | Existing — add `?from_order=<id>` param handling to pre-fill cart + customer |
+| `src/components/notifications/order-notification-listener.tsx` | New — Supabase Realtime subscription, bell sound, toast |
+| `src/app/(dashboard)/layout.tsx` | Mount `<OrderNotificationListener />` |
+| `src/app/(frontline)/layout.tsx` | Mount `<OrderNotificationListener />` |
+| `public/sounds/new-order.mp3` | New — bell chime sound file |
+| `next.config.js` | **No changes needed** |
+
+No new API routes in syd-pos. No CORS config needed.
+
+### New repo: `syd-shop` (Next.js on Railway)
+| Path | Purpose |
+|------|---------|
+| `src/lib/supabase/client.ts` | Supabase client setup (anon key for reads, service role for server-side writes) |
+| `src/lib/supabase/queries/products.ts` | Product catalog query (with category, images, inventory join) |
+| `src/lib/supabase/queries/shop-settings.ts` | Fetch store config (excludes lat/lng from public query) |
+| `src/app/page.tsx` | Catalog landing — search, category filters, product grid |
+| `src/app/products/[id]/page.tsx` | Product detail — image gallery, stock status, Add to Cart |
+| `src/app/cart/page.tsx` | Cart review |
+| `src/app/checkout/page.tsx` | Single-page checkout (contact, address, map, payment) |
+| `src/app/checkout/actions.ts` | Server actions: COD check, order submit, proof upload (service role), email via Resend |
+| `src/app/order/[orderNumber]/page.tsx` | Order confirmation + status |
+| `src/lib/cart.ts` | Cart state in `localStorage` |
+| `src/lib/haversine.ts` | COD distance calculation (server-side) |
+
+Env vars on Railway:
+```
+NEXT_PUBLIC_SUPABASE_URL=<same as syd-pos>
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<same as syd-pos>
+SUPABASE_SERVICE_ROLE_KEY=<secret, never exposed to browser>
+```
+
+---
+
+## Open Questions Before Implementation
+
+All resolved:
+- Storefront: Next.js, hosted on Railway (~$5/month)
+- Payment: COD + GCash + Bank Transfer + QR Code, all manual proof-based (no payment gateway)
+- Products: All active + `available_online` toggle per product
+- Fulfillment: Delivery (COD within 5km) + Pickup (COD always available)
+- Orders: Standalone online orders page in POS dashboard
+- SMS: TBD — not in scope for initial build
+
+---
+
+## Verification Plan
+1. Product catalog loads from Railway → Supabase directly (confirm zero Vercel function calls in Vercel dashboard)
+2. Out-of-stock product shows "Out of Stock" badge, not hidden; `?in_stock=true` filter hides it
+3. Shop settings fetch returns GCash/bank/QR details but NOT store lat/lng
+4. Live map preview: pin at ≤5km → shows "₱50 flat fee" + COD available; pin at >5km → shows "₱30 × Xkm = ₱XXX" + COD hidden
+5. Server-side fee recalculated at submission — cannot be manipulated by the customer from the browser
+6. `online_orders.distance_km` and `online_orders.delivery_fee` match the server-calculated values
+7. Pickup orders: map step skipped entirely, delivery fee = ₱0, COD always available
+8. Two simultaneous order submissions get different `SYD-XXXX` order numbers (sequence is concurrent-safe)
+6. Payment proof upload: screenshot reaches `payment-proofs` Supabase bucket, `payment_status` updates to `submitted`
+7. Completed order appears in syd-pos `/orders/online` dashboard immediately
+8. Staff creates a POS sale for the order items → links transaction_id → order marked fulfilled
+9. The POS sale appears in revenue reports and inventory is deducted through the normal transaction flow
+10. Cancelling an order before fulfillment → inventory untouched, no revenue recorded
+11. Hiding a product via `shop_product_overrides` removes it from shop without touching the POS product record
+12. Cart persists in `localStorage` across page refreshes; cleared after successful order placement
+13. Order submitted with a phone number that exists in POS customers → order links to existing customer, "Returning Customer" badge shown
+14. Order submitted with an unknown phone number → new customer created in POS customers table, "New Customer" badge shown
+15. Phone number normalization: "09171234567", "+639171234567", "9171234567" all match the same customer
+16. Staff edits an order line (changes qty) → change saved to `online_order_lines`, log note recorded
+17. "Convert to Sale" opens POS with customer + all items pre-filled from the order
+18. Completing the POS transaction automatically sets `online_orders.transaction_id` + `status = delivered/picked_up` — no manual step
+19. New order triggers bell sound + toast on both dashboard and frontline pages in real-time (Supabase Realtime)
+20. Staff email received within seconds of order placement, contains order link
