@@ -2,7 +2,7 @@
 
 import { createServerClient } from '@/lib/supabase/server'
 import { getShopSettings } from '@/lib/supabase/queries/shop-settings'
-import { calcFeeFromDistance } from '@/lib/haversine'
+import { calcFeeFromDistance, COD_MAX_SUBTOTAL } from '@/lib/haversine'
 import { getRoadDistance } from '@/lib/routing'
 import { Resend } from 'resend'
 import type { CartItem, FulfillmentType, PaymentMethod } from '@/lib/types'
@@ -77,6 +77,10 @@ export async function submitOrder(
 
   const subtotal = items.reduce((s, i) => s + i.unit_price * i.quantity, 0)
   const total_amount = subtotal + delivery_fee
+
+  if (paymentMethod === 'cod' && subtotal >= COD_MAX_SUBTOTAL) {
+    return { error: `COD is not available for orders ₱${COD_MAX_SUBTOTAL.toLocaleString('en-PH')} and above. Please select another payment method.` }
+  }
 
   const supabase = createServerClient()
 

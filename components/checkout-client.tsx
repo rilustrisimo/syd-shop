@@ -7,7 +7,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { MapPin, AlertTriangle, CheckCircle, Upload, X, ArrowLeft, Package } from 'lucide-react'
 import { useCart } from '@/lib/cart'
-import { calcFeeFromDistance } from '@/lib/haversine'
+import { calcFeeFromDistance, COD_MAX_SUBTOTAL } from '@/lib/haversine'
 import { getRoadDistance } from '@/lib/routing'
 import { formatPrice } from '@/components/currency'
 import { submitOrder } from '@/app/checkout/actions'
@@ -112,6 +112,12 @@ export function CheckoutClient({ settings }: CheckoutClientProps) {
   useEffect(() => {
     if (isHydrated && items.length === 0) router.replace('/')
   }, [isHydrated, items.length, router])
+
+  const codBlockedByAmount = subtotal >= COD_MAX_SUBTOTAL
+
+  useEffect(() => {
+    if (codBlockedByAmount && paymentMethod === 'cod') setPaymentMethod('gcash')
+  }, [codBlockedByAmount, paymentMethod])
 
   const delivery_fee = fulfillment === 'delivery' ? (deliveryCalc?.delivery_fee ?? 0) : 0
   const total = subtotal + delivery_fee
@@ -287,9 +293,15 @@ export function CheckoutClient({ settings }: CheckoutClientProps) {
             {/* Payment */}
             <SectionCard title="Payment Method">
               <div className="space-y-4">
+                {codBlockedByAmount && (
+                  <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-xs text-amber-800">
+                    <span className="flex-shrink-0 mt-0.5">💵</span>
+                    <span>Cash on Delivery is not available for orders <strong>₱5,000 and above</strong>. Please select another payment method.</span>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-2">
                   {([
-                    { value: 'cod', label: 'Cash on Delivery', emoji: '💵', disabled: fulfillment === 'delivery' && deliveryCalc != null && !deliveryCalc.cod_available },
+                    { value: 'cod', label: 'Cash on Delivery', emoji: '💵', disabled: codBlockedByAmount || (fulfillment === 'delivery' && deliveryCalc != null && !deliveryCalc.cod_available) },
                     { value: 'gcash', label: 'GCash', emoji: '📱', disabled: false },
                     { value: 'bank_transfer', label: 'Bank Transfer', emoji: '🏦', disabled: false },
                     { value: 'qr', label: 'QR Code', emoji: '📷', disabled: false },

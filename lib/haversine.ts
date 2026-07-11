@@ -1,5 +1,7 @@
 import type { DeliveryCalc, ShopSettings } from '@/lib/types'
 
+export const COD_MAX_SUBTOTAL = 5_000  // COD blocked for orders at or above this amount
+
 export function haversineKm(
   lat1: number, lon1: number,
   lat2: number, lon2: number
