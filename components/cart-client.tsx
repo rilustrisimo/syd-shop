@@ -8,6 +8,7 @@ import { useCart } from '@/lib/cart'
 import { getStockMap } from '@/lib/supabase/queries/products'
 import { formatPrice } from '@/components/currency'
 import { QtyInput } from '@/components/qty-input'
+import { optimizedImageUrl } from '@/lib/image'
 
 interface CartClientProps {
   branchId: string
@@ -100,7 +101,7 @@ export function CartClient({ branchId }: CartClientProps) {
                     <Link href={`/products/${item.product_id}`} className="relative w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-slate-100">
                       {item.image_url ? (
                         <Image
-                          src={item.image_url}
+                          src={optimizedImageUrl(item.image_url, { width: 150 })}
                           alt={item.product_name}
                           fill
                           className="object-cover"

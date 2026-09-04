@@ -10,6 +10,7 @@ import { useCart } from '@/lib/cart'
 import { calcFeeFromDistance, COD_MAX_SUBTOTAL } from '@/lib/haversine'
 import { getRoadDistance } from '@/lib/routing'
 import { formatPrice } from '@/components/currency'
+import { optimizedImageUrl } from '@/lib/image'
 import { submitOrder } from '@/app/checkout/actions'
 import type { ShopSettings, FulfillmentType, PaymentMethod, DeliveryCalc } from '@/lib/types'
 
@@ -409,7 +410,7 @@ export function CheckoutClient({ settings }: CheckoutClientProps) {
                     <div key={item.product_id} className="flex gap-3">
                       <div className="relative w-12 h-12 flex-shrink-0 rounded-lg overflow-hidden bg-slate-100">
                         {item.image_url ? (
-                          <Image src={item.image_url} alt={item.product_name} fill className="object-cover" unoptimized />
+                          <Image src={optimizedImageUrl(item.image_url, { width: 120 })} alt={item.product_name} fill className="object-cover" unoptimized />
                         ) : (
                           <div className="flex items-center justify-center h-full">
                             <Package className="w-5 h-5 text-slate-300" />

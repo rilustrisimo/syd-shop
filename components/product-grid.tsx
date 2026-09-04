@@ -9,6 +9,7 @@ import { useCatalogContext } from '@/lib/catalog-context'
 import type { ShopProduct } from '@/lib/types'
 import { formatPrice } from '@/components/currency'
 import { QtyInput } from '@/components/qty-input'
+import { optimizedImageUrl } from '@/lib/image'
 
 const PAGE_SIZE = 24
 
@@ -33,7 +34,7 @@ const ProductCard = memo(function ProductCard({ product, qty, onAdd, onUpdateQua
         <div className="relative aspect-square bg-slate-100 overflow-hidden">
           {product.primary_image_url ? (
             <Image
-              src={product.primary_image_url}
+              src={optimizedImageUrl(product.primary_image_url, { width: 500 })}
               alt={product.name}
               fill
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"

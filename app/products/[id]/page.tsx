@@ -10,6 +10,7 @@ import { getPublicShopSettings } from '@/lib/supabase/queries/shop-settings'
 import { useCart } from '@/lib/cart'
 import { formatPrice } from '@/components/currency'
 import { QtyInput } from '@/components/qty-input'
+import { optimizedImageUrl } from '@/lib/image'
 import type { ShopProductDetail } from '@/lib/types'
 
 export default function ProductDetailPage() {
@@ -122,7 +123,7 @@ export default function ProductDetailPage() {
             <div className="relative aspect-square bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
               {images.length > 0 ? (
                 <Image
-                  src={images[selectedImage]?.url ?? images[0].url}
+                  src={optimizedImageUrl(images[selectedImage]?.url ?? images[0].url, { width: 800 })}
                   alt={product.name}
                   fill
                   sizes="(max-width: 1024px) 100vw, 50vw"
@@ -154,7 +155,7 @@ export default function ProductDetailPage() {
                       selectedImage === i ? 'border-blue-500' : 'border-slate-200 hover:border-blue-300'
                     }`}
                   >
-                    <Image src={img.url} alt={`View ${i + 1}`} fill className="object-cover" unoptimized />
+                    <Image src={optimizedImageUrl(img.url, { width: 150 })} alt={`View ${i + 1}`} fill className="object-cover" unoptimized />
                   </button>
                 ))}
               </div>
