@@ -9,6 +9,7 @@ import { getProductById } from '@/lib/supabase/queries/products'
 import { getPublicShopSettings } from '@/lib/supabase/queries/shop-settings'
 import { useCart } from '@/lib/cart'
 import { formatPrice } from '@/components/currency'
+import { QtyInput } from '@/components/qty-input'
 import type { ShopProductDetail } from '@/lib/types'
 
 export default function ProductDetailPage() {
@@ -240,7 +241,14 @@ export default function ProductDetailPage() {
                     >
                       <Minus className="w-4 h-4" />
                     </button>
-                    <span className={`text-xl font-bold ${product.in_stock ? 'text-blue-700' : 'text-amber-700'}`}>{cartQty} in cart</span>
+                    <span className={`flex items-center gap-1.5 text-xl font-bold ${product.in_stock ? 'text-blue-700' : 'text-amber-700'}`}>
+                      <QtyInput
+                        value={cartQty}
+                        onChange={(v) => updateQuantity(product.id, v)}
+                        className="w-16 bg-transparent text-center focus:outline-none"
+                      />
+                      in cart
+                    </span>
                     <button
                       onClick={() => updateQuantity(product.id, cartQty + 1)}
                       className={`w-9 h-9 flex items-center justify-center rounded-full text-white transition-colors ${
@@ -300,7 +308,11 @@ export default function ProductDetailPage() {
               >
                 <Minus className="w-4 h-4" />
               </button>
-              <span className="text-lg font-bold text-white w-6 text-center">{cartQty}</span>
+              <QtyInput
+                value={cartQty}
+                onChange={(v) => updateQuantity(product.id, v)}
+                className="text-lg font-bold text-white bg-transparent w-10 text-center focus:outline-none"
+              />
               <button
                 onClick={() => updateQuantity(product.id, cartQty + 1)}
                 className={`w-8 h-8 flex items-center justify-center rounded-full text-white ${

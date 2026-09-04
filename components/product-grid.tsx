@@ -8,6 +8,7 @@ import { fetchStorefrontProducts } from '@/app/(catalog)/actions'
 import { useCatalogContext } from '@/lib/catalog-context'
 import type { ShopProduct } from '@/lib/types'
 import { formatPrice } from '@/components/currency'
+import { QtyInput } from '@/components/qty-input'
 
 const PAGE_SIZE = 24
 
@@ -95,7 +96,11 @@ const ProductCard = memo(function ProductCard({ product, qty, onAdd, onUpdateQua
                 >
                   <Minus className="w-3 h-3" />
                 </button>
-                <span className={`text-sm font-bold ${product.in_stock ? 'text-blue-700' : 'text-amber-700'}`}>{qty}</span>
+                <QtyInput
+                  value={qty}
+                  onChange={(v) => onUpdateQuantity(product.id, v)}
+                  className={`w-10 bg-transparent text-center text-sm font-bold focus:outline-none ${product.in_stock ? 'text-blue-700' : 'text-amber-700'}`}
+                />
                 <button
                   onClick={() => onUpdateQuantity(product.id, qty + 1)}
                   className={`w-6 h-6 flex items-center justify-center rounded-full text-white ${

@@ -7,6 +7,7 @@ import { ArrowLeft, Package, Trash2, Plus, Minus, ShoppingBag, ShoppingCart, Clo
 import { useCart } from '@/lib/cart'
 import { getStockMap } from '@/lib/supabase/queries/products'
 import { formatPrice } from '@/components/currency'
+import { QtyInput } from '@/components/qty-input'
 
 interface CartClientProps {
   branchId: string
@@ -141,9 +142,11 @@ export function CartClient({ branchId }: CartClientProps) {
                           >
                             <Minus className="w-3 h-3" />
                           </button>
-                          <span className={`text-sm font-bold w-6 text-center ${requested ? 'text-amber-900' : 'text-blue-900'}`}>
-                            {item.quantity}
-                          </span>
+                          <QtyInput
+                            value={item.quantity}
+                            onChange={(v) => updateQuantity(item.product_id, v)}
+                            className={`w-10 bg-transparent text-sm font-bold text-center focus:outline-none ${requested ? 'text-amber-900' : 'text-blue-900'}`}
+                          />
                           <button
                             onClick={() => updateQuantity(item.product_id, item.quantity + 1)}
                             className={`w-6 h-6 flex items-center justify-center rounded-md text-white transition-colors ${
