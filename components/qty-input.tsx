@@ -15,6 +15,15 @@ const ALLOWED_KEYS = [
   'Home', 'End',
 ]
 
+// border-current/ring-current pick up whatever text-* color each call site
+// already applies, so the field reads as editable (bordered box, hover/focus
+// feedback) while automatically matching that site's color theme (blue,
+// amber, or white-on-dark) without needing to know it here.
+const BASE_CLASSES =
+  'rounded-md border border-current/25 px-1.5 py-0.5 cursor-text ' +
+  'transition-colors hover:border-current/50 ' +
+  'focus:outline-none focus:border-current focus:ring-2 focus:ring-current/20'
+
 // Typeable quantity field — lets a shopper type e.g. "250" directly instead
 // of clicking +/- hundreds of times for a bulk order. Supports decimals for
 // weight-sold items (kg, etc.). Mirrors the cart-quantity-input pattern used
@@ -65,7 +74,7 @@ export function QtyInput({ value, onChange, className = '', min = 1 }: QtyInputP
           setRaw(String(parsed))
         }
       }}
-      className={className}
+      className={`${BASE_CLASSES} ${className}`}
     />
   )
 }

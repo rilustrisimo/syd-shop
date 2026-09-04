@@ -99,7 +99,7 @@ const ProductCard = memo(function ProductCard({ product, qty, onAdd, onUpdateQua
                 <QtyInput
                   value={qty}
                   onChange={(v) => onUpdateQuantity(product.id, v)}
-                  className={`w-10 bg-transparent text-center text-sm font-bold focus:outline-none ${product.in_stock ? 'text-blue-700' : 'text-amber-700'}`}
+                  className={`w-14 text-center text-sm font-bold ${product.in_stock ? 'text-blue-700' : 'text-amber-700'}`}
                 />
                 <button
                   onClick={() => onUpdateQuantity(product.id, qty + 1)}

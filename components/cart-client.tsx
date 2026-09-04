@@ -145,7 +145,7 @@ export function CartClient({ branchId }: CartClientProps) {
                           <QtyInput
                             value={item.quantity}
                             onChange={(v) => updateQuantity(item.product_id, v)}
-                            className={`w-10 bg-transparent text-sm font-bold text-center focus:outline-none ${requested ? 'text-amber-900' : 'text-blue-900'}`}
+                            className={`w-14 text-sm font-bold text-center ${requested ? 'text-amber-900' : 'text-blue-900'}`}
                           />
                           <button
                             onClick={() => updateQuantity(item.product_id, item.quantity + 1)}

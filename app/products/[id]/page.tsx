@@ -245,7 +245,7 @@ export default function ProductDetailPage() {
                       <QtyInput
                         value={cartQty}
                         onChange={(v) => updateQuantity(product.id, v)}
-                        className="w-16 bg-transparent text-center focus:outline-none"
+                        className="w-20 text-center"
                       />
                       in cart
                     </span>
@@ -311,7 +311,7 @@ export default function ProductDetailPage() {
               <QtyInput
                 value={cartQty}
                 onChange={(v) => updateQuantity(product.id, v)}
-                className="text-lg font-bold text-white bg-transparent w-10 text-center focus:outline-none"
+                className="text-lg font-bold text-white w-14 text-center"
               />
               <button
                 onClick={() => updateQuantity(product.id, cartQty + 1)}
