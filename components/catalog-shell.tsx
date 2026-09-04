@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useDeferredValue, useMemo, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -33,24 +33,37 @@ export function CatalogShell({ categories, branchId, storeName = 'SYD Constructi
   const { items, itemCount, subtotal, addItem, updateQuantity } = useCart()
   const [search, setSearch] = useState('')
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  // Deferred so rapid typing doesn't force the sidebar to re-render on every
+  // keystroke — React will catch this up once the input settles.
+  const deferredSearch = useDeferredValue(search)
   // While a search is active, results span all categories — don't highlight
   // the page's own category until the search box is cleared.
-  const effectiveActiveCategoryId = search.trim() ? undefined : activeCategoryId
+  const effectiveActiveCategoryId = deferredSearch.trim() ? undefined : activeCategoryId
 
   function closeMobileSidebar() {
     setMobileSidebarOpen(false)
   }
 
+  // Picking a category (or "All Products") while a search is active would
+  // otherwise keep showing global search results instead of that category's
+  // list, since search overrides category scoping — clear it on navigation.
+  function clearSearch() {
+    setSearch('')
+  }
+
+  const contextValue = useMemo(
+    () => ({
+      branchId,
+      categories,
+      search,
+      setSearch,
+      cart: { items, itemCount, subtotal, addItem, updateQuantity },
+    }),
+    [branchId, categories, search, items, itemCount, subtotal, addItem, updateQuantity]
+  )
+
   return (
-    <CatalogContext.Provider
-      value={{
-        branchId,
-        categories,
-        search,
-        setSearch,
-        cart: { items, itemCount, subtotal, addItem, updateQuantity },
-      }}
-    >
+    <CatalogContext.Provider value={contextValue}>
       <div className="min-h-screen flex flex-col">
         {/* ── Top Header ── */}
         <header className="sticky top-0 z-40 bg-slate-900 border-b border-slate-800 shadow-md">
@@ -117,6 +130,7 @@ export function CatalogShell({ categories, branchId, storeName = 'SYD Constructi
               <nav className="p-2">
                 <Link
                   href="/"
+                  onClick={clearSearch}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left cursor-pointer ${
                     !effectiveActiveCategoryId
                       ? 'bg-blue-600 text-white'
@@ -130,6 +144,7 @@ export function CatalogShell({ categories, branchId, storeName = 'SYD Constructi
                   <Link
                     key={cat.id}
                     href={categoryHref(cat.id, categories)}
+                    onClick={clearSearch}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left cursor-pointer ${
                       effectiveActiveCategoryId === cat.id
                         ? 'bg-blue-600 text-white'
@@ -155,7 +170,7 @@ export function CatalogShell({ categories, branchId, storeName = 'SYD Constructi
                 <nav className="p-2">
                   <Link
                     href="/"
-                    onClick={closeMobileSidebar}
+                    onClick={() => { clearSearch(); closeMobileSidebar() }}
                     className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-left transition-colors cursor-pointer ${
                       !effectiveActiveCategoryId ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-slate-50'
                     }`}
@@ -167,7 +182,7 @@ export function CatalogShell({ categories, branchId, storeName = 'SYD Constructi
                     <Link
                       key={cat.id}
                       href={categoryHref(cat.id, categories)}
-                      onClick={closeMobileSidebar}
+                      onClick={() => { clearSearch(); closeMobileSidebar() }}
                       className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-left transition-colors cursor-pointer ${
                         effectiveActiveCategoryId === cat.id ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-slate-50'
                       }`}

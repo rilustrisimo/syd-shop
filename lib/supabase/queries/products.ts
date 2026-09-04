@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase/client'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ShopProduct, ShopProductDetail } from '@/lib/types'
 
 interface FetchProductsParams {
@@ -28,12 +29,12 @@ let statsCache: { data: SalesStatsMap; expiresAt: number } | null = null
 let statsPromise: Promise<SalesStatsMap> | null = null
 const STATS_CACHE_MS = 60_000
 
-async function getSalesStatsMap(): Promise<SalesStatsMap> {
+async function getSalesStatsMap(client: SupabaseClient): Promise<SalesStatsMap> {
   if (statsCache && statsCache.expiresAt > Date.now()) return statsCache.data
   if (statsPromise) return statsPromise
 
   statsPromise = (async () => {
-    const { data: stats, error: statsError } = await supabase
+    const { data: stats, error: statsError } = await client
       .from('product_sales_stats')
       .select('product_id, last_sale_at, qty_sold_90d')
     if (statsError) {
@@ -54,13 +55,48 @@ async function getSalesStatsMap(): Promise<SalesStatsMap> {
   return statsPromise
 }
 
-export async function getProducts({
-  branchId,
-  categoryId,
-  search,
-  inStockOnly = false,
-}: FetchProductsParams): Promise<{ products: ShopProduct[]; total: number }> {
-  let query = supabase
+// product_profit_stats is a server-only view (not granted to anon/authenticated)
+// exposing per-product revenue/cost over the trailing 90 days. It must only
+// ever be queried with the service-role client, and the resulting profit
+// numbers are used purely to rank products — never attached to the
+// ShopProduct objects returned to the browser.
+type ProfitStatsMap = Map<string, { revenue_90d: number; cost_90d: number }>
+
+let profitStatsCache: { data: ProfitStatsMap; expiresAt: number } | null = null
+let profitStatsPromise: Promise<ProfitStatsMap> | null = null
+
+async function getProfitStatsMap(client: SupabaseClient): Promise<ProfitStatsMap> {
+  if (profitStatsCache && profitStatsCache.expiresAt > Date.now()) return profitStatsCache.data
+  if (profitStatsPromise) return profitStatsPromise
+
+  profitStatsPromise = (async () => {
+    const { data: stats, error: statsError } = await client
+      .from('product_profit_stats')
+      .select('product_id, revenue_90d, cost_90d')
+    if (statsError) {
+      console.error('Failed to fetch product profit stats:', statsError.message)
+    }
+    const map: ProfitStatsMap = new Map()
+    for (const row of stats ?? []) {
+      map.set(row.product_id, {
+        revenue_90d: Number(row.revenue_90d ?? 0),
+        cost_90d: Number(row.cost_90d ?? 0),
+      })
+    }
+    profitStatsCache = { data: map, expiresAt: Date.now() + STATS_CACHE_MS }
+    profitStatsPromise = null
+    return map
+  })()
+
+  return profitStatsPromise
+}
+
+async function queryProducts(
+  client: SupabaseClient,
+  { branchId, categoryId, search, inStockOnly = false }: FetchProductsParams,
+  opts: { rankByProfit?: boolean } = {}
+): Promise<{ products: ShopProduct[]; total: number }> {
+  let query = client
     .from('products')
     .select(`
       id, code, name, description, current_selling_price,
@@ -89,7 +125,8 @@ export async function getProducts({
   const { data, error } = await query
   if (error) throw error
 
-  const statsMap = await getSalesStatsMap()
+  const statsMap = await getSalesStatsMap(client)
+  const profitMap = opts.rankByProfit ? await getProfitStatsMap(client) : null
 
   const products: ShopProduct[] = (data ?? [])
     .filter((p: any) => !p.overrides?.[0]?.hidden_online)
@@ -122,13 +159,108 @@ export async function getProducts({
     })
     .filter((p) => !isDeadStock(p.last_sale_at, p.quantity_on_hand))
     .filter((p) => !inStockOnly || p.in_stock)
-    .sort((a, b) =>
+
+  if (profitMap) {
+    // Rank by gross profit contributed over the trailing 90 days (revenue
+    // minus cost) so a high-volume, low-margin product no longer
+    // automatically outranks a lower-volume but more profitable one.
+    // Quantity sold stays as the tiebreaker for equal/zero-profit items.
+    products.sort((a, b) => {
+      const profitA = profitMap.get(a.id)
+      const profitB = profitMap.get(b.id)
+      const pA = profitA ? profitA.revenue_90d - profitA.cost_90d : 0
+      const pB = profitB ? profitB.revenue_90d - profitB.cost_90d : 0
+      return (
+        Number(b.in_stock) - Number(a.in_stock) ||
+        pB - pA ||
+        b.qty_sold_90d - a.qty_sold_90d ||
+        a.name.localeCompare(b.name)
+      )
+    })
+  } else {
+    products.sort((a, b) =>
       Number(b.in_stock) - Number(a.in_stock) ||
       b.qty_sold_90d - a.qty_sold_90d ||
       a.name.localeCompare(b.name)
     )
+  }
 
   return { products, total: products.length }
+}
+
+export async function getProducts(
+  params: FetchProductsParams
+): Promise<{ products: ShopProduct[]; total: number }> {
+  return queryProducts(supabase, params)
+}
+
+// Server-only: ranks products by trailing-90-day gross profit instead of
+// pure quantity sold. `client` must be the service-role client
+// (see lib/supabase/server.ts) since product_profit_stats isn't
+// anon/authenticated-readable. Call this only from server components/actions.
+export async function getRankedProductsForShop(
+  client: SupabaseClient,
+  params: FetchProductsParams
+): Promise<{ products: ShopProduct[]; total: number }> {
+  return queryProducts(client, params, { rankByProfit: true })
+}
+
+interface PageOpts {
+  limit?: number
+  offset?: number
+}
+
+// Server-only, paginated: pushes filtering, profit-ranking, and LIMIT/OFFSET
+// into a single RPC (get_shop_product_catalog, migration 00079) so pages stay
+// correctly ordered and cheap at any catalog size — the old getProducts/
+// getRankedProductsForShop path fetches the entire matching set in one go,
+// which doesn't scale toward thousands of products. `client` must be the
+// service-role client; falls back to the unpaginated ranked fetch (still
+// correct, just without pagination) if the RPC/migration isn't deployed yet,
+// so the storefront never shows a blank page.
+export async function getRankedProductsPageForShop(
+  client: SupabaseClient,
+  params: FetchProductsParams,
+  { limit = 24, offset = 0 }: PageOpts = {}
+): Promise<{ products: ShopProduct[]; total: number }> {
+  const { branchId, categoryId, search, inStockOnly = false } = params
+
+  const { data, error } = await client.rpc('get_shop_product_catalog', {
+    p_branch_id: branchId,
+    p_category_id: categoryId ?? null,
+    p_search: search ?? null,
+    p_in_stock_only: inStockOnly,
+    p_limit: limit,
+    p_offset: offset,
+  })
+
+  if (error) {
+    console.error('get_shop_product_catalog RPC failed, falling back to unpaginated fetch:', error.message)
+    return getRankedProductsForShop(client, params)
+  }
+
+  const rows = (data ?? []) as any[]
+  const products: ShopProduct[] = rows.map((r) => ({
+    id: r.id,
+    code: r.code,
+    name: r.name,
+    description: r.description,
+    current_selling_price: Number(r.current_selling_price),
+    primary_image_url: r.primary_image_url,
+    unit_label: r.uom_code ?? r.uom_name ?? 'pc',
+    category_id: r.category_id,
+    category_name: r.category_name ?? '',
+    subcategory_id: r.subcategory_id,
+    subcategory_name: r.subcategory_name,
+    quantity_on_hand: Number(r.quantity_on_hand),
+    in_stock: r.in_stock,
+    qty_sold_90d: Number(r.qty_sold_90d),
+    last_sale_at: r.last_sale_at,
+  }))
+
+  const total = rows.length > 0 ? Number(rows[0].total_count) : 0
+
+  return { products, total }
 }
 
 export async function getProductById(
