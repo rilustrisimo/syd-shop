@@ -1,4 +1,7 @@
 import type { Metadata } from 'next'
+import { RouteProgress } from '@/components/route-progress'
+import { CallButton } from '@/components/call-button'
+import { getPublicShopSettings } from '@/lib/supabase/queries/shop-settings'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -10,11 +13,15 @@ export const metadata: Metadata = {
   icons: { icon: '/icon.svg' },
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const settings = await getPublicShopSettings()
+
   return (
     <html lang="en" className="h-full">
       <body className="min-h-full bg-slate-50 text-slate-900 antialiased">
+        <RouteProgress />
         {children}
+        {settings?.store_phone && <CallButton phone={settings.store_phone} />}
       </body>
     </html>
   )

@@ -6,8 +6,52 @@ interface FetchProductsParams {
   categoryId?: string
   search?: string
   inStockOnly?: boolean
-  page?: number
-  limit?: number
+}
+
+const STALE_CUTOFF_MS = 90 * 24 * 60 * 60 * 1000
+
+// A product is hidden from the shop only when it's a proven slow mover
+// (sold before, but not in the last 90 days) AND currently has zero stock.
+// Never-sold products and anything still on the shelf stay visible.
+function isDeadStock(lastSaleAt: string | null, quantityOnHand: number): boolean {
+  if (!lastSaleAt || quantityOnHand > 0) return false
+  return Date.now() - new Date(lastSaleAt).getTime() > STALE_CUTOFF_MS
+}
+
+type SalesStatsMap = Map<string, { last_sale_at: string | null; qty_sold_90d: number }>
+
+// The stats view rarely changes minute-to-minute, and re-fetching it on every
+// navigation/category switch was adding a redundant round trip each time.
+// Cache it for a short window (module-scoped — separate per server process
+// and per browser tab, which is the right granularity here).
+let statsCache: { data: SalesStatsMap; expiresAt: number } | null = null
+let statsPromise: Promise<SalesStatsMap> | null = null
+const STATS_CACHE_MS = 60_000
+
+async function getSalesStatsMap(): Promise<SalesStatsMap> {
+  if (statsCache && statsCache.expiresAt > Date.now()) return statsCache.data
+  if (statsPromise) return statsPromise
+
+  statsPromise = (async () => {
+    const { data: stats, error: statsError } = await supabase
+      .from('product_sales_stats')
+      .select('product_id, last_sale_at, qty_sold_90d')
+    if (statsError) {
+      console.error('Failed to fetch product sales stats:', statsError.message)
+    }
+    const map: SalesStatsMap = new Map()
+    for (const row of stats ?? []) {
+      map.set(row.product_id, {
+        last_sale_at: row.last_sale_at,
+        qty_sold_90d: Number(row.qty_sold_90d ?? 0),
+      })
+    }
+    statsCache = { data: map, expiresAt: Date.now() + STATS_CACHE_MS }
+    statsPromise = null
+    return map
+  })()
+
+  return statsPromise
 }
 
 export async function getProducts({
@@ -15,8 +59,6 @@ export async function getProducts({
   categoryId,
   search,
   inStockOnly = false,
-  page = 1,
-  limit = 48,
 }: FetchProductsParams): Promise<{ products: ShopProduct[]; total: number }> {
   let query = supabase
     .from('products')
@@ -30,11 +72,13 @@ export async function getProducts({
       images:product_images(url, alt_text, is_primary, sort_order),
       inventory:branch_inventory(quantity_on_hand, branch_id),
       overrides:shop_product_overrides(hidden_online)
-    `, { count: 'exact' })
+    `)
     .eq('is_active', true)
     .order('name')
 
-  if (categoryId) {
+  // A search term searches across all products, ignoring the current
+  // category page — clearing the search reverts to the category-scoped list.
+  if (categoryId && !search) {
     query = query.eq('category_id', categoryId)
   }
 
@@ -42,11 +86,10 @@ export async function getProducts({
     query = query.or(`name.ilike.%${search}%,code.ilike.%${search}%`)
   }
 
-  const offset = (page - 1) * limit
-  query = query.range(offset, offset + limit - 1)
-
-  const { data, error, count } = await query
+  const { data, error } = await query
   if (error) throw error
+
+  const statsMap = await getSalesStatsMap()
 
   const products: ShopProduct[] = (data ?? [])
     .filter((p: any) => !p.overrides?.[0]?.hidden_online)
@@ -57,6 +100,7 @@ export async function getProducts({
       const quantity_on_hand = Number(branchInventory?.quantity_on_hand ?? 0)
       const primaryImage = (p.images ?? []).find((img: any) => img.is_primary)
         ?? (p.images ?? [])[0]
+      const stats = statsMap.get(p.id)
 
       return {
         id: p.id,
@@ -72,11 +116,19 @@ export async function getProducts({
         subcategory_name: p.subcategory?.name ?? null,
         quantity_on_hand,
         in_stock: quantity_on_hand > 0,
+        qty_sold_90d: stats?.qty_sold_90d ?? 0,
+        last_sale_at: stats?.last_sale_at ?? null,
       }
     })
+    .filter((p) => !isDeadStock(p.last_sale_at, p.quantity_on_hand))
     .filter((p) => !inStockOnly || p.in_stock)
+    .sort((a, b) =>
+      Number(b.in_stock) - Number(a.in_stock) ||
+      b.qty_sold_90d - a.qty_sold_90d ||
+      a.name.localeCompare(b.name)
+    )
 
-  return { products, total: count ?? 0 }
+  return { products, total: products.length }
 }
 
 export async function getProductById(
@@ -112,6 +164,14 @@ export async function getProductById(
   )
   const primaryImage = images.find((img: any) => img.is_primary) ?? images[0]
 
+  const { data: stats } = await supabase
+    .from('product_sales_stats')
+    .select('last_sale_at, qty_sold_90d')
+    .eq('product_id', id)
+    .maybeSingle()
+
+  if (isDeadStock(stats?.last_sale_at ?? null, quantity_on_hand)) return null
+
   return {
     id: data.id,
     code: data.code,
@@ -126,6 +186,8 @@ export async function getProductById(
     subcategory_name: (data as any).subcategory?.name ?? null,
     quantity_on_hand,
     in_stock: quantity_on_hand > 0,
+    qty_sold_90d: Number(stats?.qty_sold_90d ?? 0),
+    last_sale_at: stats?.last_sale_at ?? null,
     images: images.map((img: any) => ({
       url: img.url,
       alt_text: img.alt_text,
@@ -133,4 +195,25 @@ export async function getProductById(
       sort_order: img.sort_order ?? 0,
     })),
   }
+}
+
+export async function getStockMap(
+  productIds: string[],
+  branchId: string
+): Promise<Record<string, number>> {
+  if (productIds.length === 0 || !branchId) return {}
+
+  const { data, error } = await supabase
+    .from('branch_inventory')
+    .select('product_id, quantity_on_hand')
+    .eq('branch_id', branchId)
+    .in('product_id', productIds)
+
+  if (error) throw error
+
+  const map: Record<string, number> = {}
+  for (const row of data ?? []) {
+    map[row.product_id] = Number(row.quantity_on_hand ?? 0)
+  }
+  return map
 }

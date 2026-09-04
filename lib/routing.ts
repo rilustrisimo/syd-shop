@@ -1,5 +1,37 @@
 import { haversineKm } from './haversine'
 
+export interface PlaceResult {
+  lat: number
+  lng: number
+  label: string
+}
+
+/**
+ * Forward-geocode a free-text place name (e.g. "Cagayan de Oro City Hall")
+ * to candidate lat/lng locations via Nominatim (OpenStreetMap), restricted
+ * to the Philippines. Used by the delivery map's place search box so
+ * customers can jump to a location by name instead of hunting for it by
+ * panning/zooming.
+ */
+export async function searchPlaces(query: string, signal?: AbortSignal): Promise<PlaceResult[]> {
+  const q = query.trim()
+  if (q.length < 3) return []
+
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(q)}&countrycodes=ph&limit=6&addressdetails=0`
+  const res = await fetch(url, {
+    signal,
+    headers: { 'User-Agent': 'SYD-Construction-Shop/1.0' },
+    cache: 'no-store',
+  })
+  if (!res.ok) return []
+  const data = await res.json()
+  return (data as any[]).map(r => ({
+    lat: Number(r.lat),
+    lng: Number(r.lon),
+    label: r.display_name as string,
+  }))
+}
+
 // Public OSRM demo server — uses OpenStreetMap road network globally.
 // Coordinates are lon,lat order (GeoJSON convention).
 const OSRM = 'https://router.project-osrm.org/route/v1/driving'

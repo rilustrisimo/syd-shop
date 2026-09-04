@@ -6,7 +6,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowLeft, Package, ShoppingCart, Plus, Minus, AlertCircle, Tag, ChevronRight } from 'lucide-react'
 import { getProductById } from '@/lib/supabase/queries/products'
-import { getShopSettings } from '@/lib/supabase/queries/shop-settings'
+import { getPublicShopSettings } from '@/lib/supabase/queries/shop-settings'
 import { useCart } from '@/lib/cart'
 import { formatPrice } from '@/components/currency'
 import type { ShopProductDetail } from '@/lib/types'
@@ -21,7 +21,7 @@ export default function ProductDetailPage() {
 
   useEffect(() => {
     async function load() {
-      const settings = await getShopSettings()
+      const settings = await getPublicShopSettings()
       const branchId = settings?.branch_id ?? ''
       const data = await getProductById(id, branchId)
       setProduct(data)
@@ -199,7 +199,9 @@ export default function ProductDetailPage() {
             ) : (
               <div className="flex items-center gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                <p className="text-xs font-medium">Currently out of stock — check back soon.</p>
+                <p className="text-xs font-medium">
+                  Currently out of stock — you can still order it on request. Staff will confirm availability and delivery timing when they call.
+                </p>
               </div>
             )}
 
@@ -211,100 +213,113 @@ export default function ProductDetailPage() {
             )}
 
             {/* Desktop: Add to cart inline */}
-            {product.in_stock && (
-              <div className="hidden lg:block">
-                {cartQty === 0 ? (
-                  <button
-                    onClick={handleAdd}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm"
-                  >
-                    <Plus className="w-5 h-5" />
-                    Add to Cart
-                  </button>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-5 py-3">
-                      <button
-                        onClick={() => updateQuantity(product.id, cartQty - 1)}
-                        className="w-9 h-9 flex items-center justify-center rounded-full bg-white border border-blue-300 text-blue-600 hover:bg-blue-100 transition-colors"
-                      >
-                        <Minus className="w-4 h-4" />
-                      </button>
-                      <span className="text-xl font-bold text-blue-700">{cartQty} in cart</span>
-                      <button
-                        onClick={() => updateQuantity(product.id, cartQty + 1)}
-                        className="w-9 h-9 flex items-center justify-center rounded-full bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-                      >
-                        <Plus className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <Link
-                      href="/cart"
-                      className="flex items-center justify-center gap-2 w-full bg-[#ffc107] hover:bg-amber-400 text-slate-900 font-bold py-3.5 rounded-xl transition-colors"
+            <div className="hidden lg:block">
+              {cartQty === 0 ? (
+                <button
+                  onClick={handleAdd}
+                  className={`w-full text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm ${
+                    product.in_stock ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-500 hover:bg-amber-600'
+                  }`}
+                >
+                  <Plus className="w-5 h-5" />
+                  {product.in_stock ? 'Add to Cart' : 'Request This Item'}
+                </button>
+              ) : (
+                <div className="space-y-3">
+                  {!product.in_stock && (
+                    <p className="text-xs font-semibold text-amber-600 text-center">On Request — staff will confirm availability</p>
+                  )}
+                  <div className={`flex items-center justify-between rounded-xl px-5 py-3 border ${
+                    product.in_stock ? 'bg-blue-50 border-blue-200' : 'bg-amber-50 border-amber-200'
+                  }`}>
+                    <button
+                      onClick={() => updateQuantity(product.id, cartQty - 1)}
+                      className={`w-9 h-9 flex items-center justify-center rounded-full bg-white border transition-colors ${
+                        product.in_stock ? 'border-blue-300 text-blue-600 hover:bg-blue-100' : 'border-amber-300 text-amber-600 hover:bg-amber-100'
+                      }`}
                     >
-                      <ShoppingCart className="w-4 h-4" />
-                      View Cart · {formatPrice(subtotal)}
-                    </Link>
+                      <Minus className="w-4 h-4" />
+                    </button>
+                    <span className={`text-xl font-bold ${product.in_stock ? 'text-blue-700' : 'text-amber-700'}`}>{cartQty} in cart</span>
+                    <button
+                      onClick={() => updateQuantity(product.id, cartQty + 1)}
+                      className={`w-9 h-9 flex items-center justify-center rounded-full text-white transition-colors ${
+                        product.in_stock ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-500 hover:bg-amber-600'
+                      }`}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
                   </div>
-                )}
+                  <Link
+                    href="/cart"
+                    className="flex items-center justify-center gap-2 w-full bg-[#ffc107] hover:bg-amber-400 text-slate-900 font-bold py-3.5 rounded-xl transition-colors"
+                  >
+                    <ShoppingCart className="w-4 h-4" />
+                    View Cart · {formatPrice(subtotal)}
+                  </Link>
+                </div>
+              )}
 
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
-                    <p className="text-base">🚚</p>
-                    <p className="text-xs font-semibold text-slate-700 mt-1">Home Delivery</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">₱50 within 3km</p>
-                  </div>
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
-                    <p className="text-base">🏪</p>
-                    <p className="text-xs font-semibold text-slate-700 mt-1">Store Pickup</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">Free — COD accepted</p>
-                  </div>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+                  <p className="text-base">🚚</p>
+                  <p className="text-xs font-semibold text-slate-700 mt-1">Home Delivery</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">₱50 within 3km</p>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+                  <p className="text-base">🏪</p>
+                  <p className="text-xs font-semibold text-slate-700 mt-1">Store Pickup</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Free — COD accepted</p>
                 </div>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Mobile: sticky add to cart bar */}
-      {product.in_stock && (
-        <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900 border-t border-slate-800 px-4 py-3 shadow-lg">
-          {cartQty === 0 ? (
-            <button
-              onClick={handleAdd}
-              className="w-full bg-[#ffc107] hover:bg-amber-400 text-slate-900 font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-colors"
-            >
-              <Plus className="w-5 h-5" />
-              Add to Cart
-            </button>
-          ) : (
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-3 bg-blue-900/30 border border-blue-700 rounded-xl px-3 py-2">
-                <button
-                  onClick={() => updateQuantity(product.id, cartQty - 1)}
-                  className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-800 border border-slate-600 text-slate-300 hover:text-white"
-                >
-                  <Minus className="w-4 h-4" />
-                </button>
-                <span className="text-lg font-bold text-white w-6 text-center">{cartQty}</span>
-                <button
-                  onClick={() => updateQuantity(product.id, cartQty + 1)}
-                  className="w-8 h-8 flex items-center justify-center rounded-full bg-blue-600 text-white hover:bg-blue-500"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
-              <Link
-                href="/cart"
-                className="flex-1 bg-[#ffc107] hover:bg-amber-400 text-slate-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2"
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900 border-t border-slate-800 px-4 py-3 shadow-lg">
+        {cartQty === 0 ? (
+          <button
+            onClick={handleAdd}
+            className={`w-full font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-colors ${
+              product.in_stock ? 'bg-[#ffc107] hover:bg-amber-400 text-slate-900' : 'bg-amber-500 hover:bg-amber-600 text-white'
+            }`}
+          >
+            <Plus className="w-5 h-5" />
+            {product.in_stock ? 'Add to Cart' : 'Request This Item'}
+          </button>
+        ) : (
+          <div className="flex items-center gap-3">
+            <div className={`flex items-center gap-3 border rounded-xl px-3 py-2 ${
+              product.in_stock ? 'bg-blue-900/30 border-blue-700' : 'bg-amber-900/30 border-amber-700'
+            }`}>
+              <button
+                onClick={() => updateQuantity(product.id, cartQty - 1)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-800 border border-slate-600 text-slate-300 hover:text-white"
               >
-                <ShoppingCart className="w-4 h-4" />
-                View Cart · {formatPrice(subtotal)}
-              </Link>
+                <Minus className="w-4 h-4" />
+              </button>
+              <span className="text-lg font-bold text-white w-6 text-center">{cartQty}</span>
+              <button
+                onClick={() => updateQuantity(product.id, cartQty + 1)}
+                className={`w-8 h-8 flex items-center justify-center rounded-full text-white ${
+                  product.in_stock ? 'bg-blue-600 hover:bg-blue-500' : 'bg-amber-500 hover:bg-amber-400'
+                }`}
+              >
+                <Plus className="w-4 h-4" />
+              </button>
             </div>
-          )}
-        </div>
-      )}
+            <Link
+              href="/cart"
+              className="flex-1 bg-[#ffc107] hover:bg-amber-400 text-slate-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2"
+            >
+              <ShoppingCart className="w-4 h-4" />
+              View Cart · {formatPrice(subtotal)}
+            </Link>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

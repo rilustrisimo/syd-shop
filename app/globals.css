@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* Bigger base size for the whole shop — customers skew older / less tech-
+   savvy, so text, buttons, and tap targets (most of which use Tailwind's
+   rem-based scale) all grow together from this one change. Percentage
+   (not a fixed px) so it still multiplies on top of a visitor's own
+   browser zoom/font-size setting instead of fighting it. */
+html {
+  font-size: 112.5%; /* 18px at the 16px browser default */
+}
+
 :root {
   --background: #ffffff;
   --foreground: #0f172a;
@@ -15,6 +24,22 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Tailwind v4 Preflight resets <button> to cursor: default — restore the
+   pointer cursor on anything clickable so it reads as interactive. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+a,
+label[for],
+input[type="checkbox"],
+input[type="radio"] {
+  cursor: pointer;
+}
+
+button:disabled,
+[role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 /* Hide scrollbar on category pills */
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
@@ -23,3 +48,12 @@ body {
 .leaflet-pane { z-index: 1 !important; }
 .leaflet-control { z-index: 2 !important; }
 .leaflet-top, .leaflet-bottom { z-index: 2 !important; }
+
+/* Bigger, easier-to-tap zoom buttons on the shop's delivery map — the
+   default Leaflet 26x26px buttons are a small target on mobile. */
+.leaflet-control-zoom a {
+  width: 44px !important;
+  height: 44px !important;
+  line-height: 42px !important;
+  font-size: 22px !important;
+}

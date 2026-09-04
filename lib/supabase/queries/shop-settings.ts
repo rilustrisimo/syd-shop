@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase/client'
-import type { ShopSettings, PublicShopSettings } from '@/lib/types'
+import { getProducts } from '@/lib/supabase/queries/products'
+import type { ShopSettings, PublicShopSettings, ShopCategory } from '@/lib/types'
 
 // Full settings including coordinates — server-side only
 export async function getShopSettings(): Promise<ShopSettings | null> {
@@ -47,4 +48,34 @@ export async function getCategories() {
 
   if (error) throw error
   return data ?? []
+}
+
+// Categories that currently have at least one product visible in the shop —
+// an empty category is a dead end for the customer, so it's left out of nav.
+// Cached briefly: both the catalog layout and each category page need this
+// (the layout for the sidebar, the page to resolve/validate its slug), and
+// without caching that's two full unfiltered-product fetches per request.
+let visibleCategoriesCache: { branchId: string; data: ShopCategory[]; expiresAt: number } | null = null
+let visibleCategoriesPromise: Promise<ShopCategory[]> | null = null
+const VISIBLE_CATEGORIES_CACHE_MS = 60_000
+
+export async function getVisibleCategories(branchId: string): Promise<ShopCategory[]> {
+  if (visibleCategoriesCache && visibleCategoriesCache.branchId === branchId && visibleCategoriesCache.expiresAt > Date.now()) {
+    return visibleCategoriesCache.data
+  }
+  if (visibleCategoriesPromise) return visibleCategoriesPromise
+
+  visibleCategoriesPromise = (async () => {
+    const [categories, { products }] = await Promise.all([
+      getCategories(),
+      getProducts({ branchId }),
+    ])
+    const visibleCategoryIds = new Set(products.map(p => p.category_id))
+    const data = categories.filter(c => visibleCategoryIds.has(c.id))
+    visibleCategoriesCache = { branchId, data, expiresAt: Date.now() + VISIBLE_CATEGORIES_CACHE_MS }
+    visibleCategoriesPromise = null
+    return data
+  })()
+
+  return visibleCategoriesPromise
 }

@@ -53,10 +53,61 @@ export async function submitOrder(
     return { error: 'Please pin your delivery location on the map.' }
   }
 
+  if (items.some(i => !i.quantity || i.quantity <= 0)) {
+    return { error: 'Invalid item quantity in your cart. Please review your cart and try again.' }
+  }
+
+  const needsReference = paymentMethod !== 'cod'
+  if (needsReference && !referenceNo.trim()) {
+    return { error: 'Please provide a payment reference number so staff can verify your payment.' }
+  }
+
   const settings = await getShopSettings()
   if (!settings) return { error: 'Shop is not configured. Please try again later.' }
 
   const normalizedPhone = normalizePhone(phone)
+  const supabase = createServerClient()
+
+  // Re-validate items against the database — never trust client-submitted prices.
+  // A tampered cart (edited localStorage) or a price/availability change since
+  // the item was added must not be able to change what gets charged.
+  const { data: dbProducts, error: productsErr } = await supabase
+    .from('products')
+    .select(`
+      id, code, name, current_selling_price, is_active,
+      selling_uom:units_of_measure!products_selling_uom_id_fkey(code, name),
+      overrides:shop_product_overrides(hidden_online)
+    `)
+    .in('id', items.map(i => i.product_id))
+
+  if (productsErr) {
+    console.error('Product validation error:', productsErr.message)
+    return { error: 'Failed to validate your order. Please try again.' }
+  }
+
+  const productMap = new Map((dbProducts ?? []).map((p: any) => [p.id, p]))
+  const unavailable: string[] = []
+  const validatedItems = items.map(item => {
+    const p: any = productMap.get(item.product_id)
+    if (!p || !p.is_active || p.overrides?.[0]?.hidden_online) {
+      unavailable.push(item.product_name)
+      return null
+    }
+    return {
+      product_id: item.product_id,
+      product_code: p.code as string,
+      product_name: p.name as string,
+      unit_label: p.selling_uom?.code ?? p.selling_uom?.name ?? item.unit_label,
+      unit_price: Number(p.current_selling_price),
+      quantity: item.quantity,
+    }
+  })
+
+  if (unavailable.length > 0) {
+    return { error: `These items are no longer available: ${unavailable.join(', ')}. Please remove them from your cart and try again.` }
+  }
+
+  const orderItems = validatedItems as { product_id: string; product_code: string; product_name: string; unit_label: string; unit_price: number; quantity: number }[]
 
   // Authoritative delivery fee
   let distance_km = 0
@@ -75,24 +126,30 @@ export async function submitOrder(
     return { error: 'COD is not available for your distance. Please select another payment method.' }
   }
 
-  const subtotal = items.reduce((s, i) => s + i.unit_price * i.quantity, 0)
+  const subtotal = orderItems.reduce((s, i) => s + i.unit_price * i.quantity, 0)
   const total_amount = subtotal + delivery_fee
 
   if (paymentMethod === 'cod' && subtotal >= COD_MAX_SUBTOTAL) {
     return { error: `COD is not available for orders ₱${COD_MAX_SUBTOTAL.toLocaleString('en-PH')} and above. Please select another payment method.` }
   }
 
-  const supabase = createServerClient()
-
-  // Customer match / create
+  // Customer match / create — matched by phone number, tolerant of whatever
+  // format the number was originally entered in (spaces, dashes, with or
+  // without +63/63 country code, with or without the leading 0). Existing
+  // customers in the main POS directory were typed in by hand over time and
+  // aren't all in the same format, so an exact string match on the raw
+  // column would create duplicate customers instead of linking to the real
+  // one. Comparing normalizePhone() output on both sides fixes that without
+  // needing to rewrite any stored phone numbers.
   let customerId: string | null = null
   try {
-    const { data: existing } = await supabase
+    const { data: candidates } = await supabase
       .from('customers')
-      .select('id')
-      .eq('phone', normalizedPhone)
-      .limit(1)
-      .single()
+      .select('id, phone')
+
+    const existing = (candidates ?? []).find(
+      (c) => c.phone && normalizePhone(c.phone) === normalizedPhone
+    )
 
     if (existing) {
       customerId = existing.id
@@ -155,7 +212,7 @@ export async function submitOrder(
   }
 
   // Insert order lines
-  const lines = items.map(item => ({
+  const lines = orderItems.map(item => ({
     order_id: order.id,
     product_id: item.product_id,
     product_code: item.product_code,
@@ -180,10 +237,11 @@ export async function submitOrder(
         .upload(path, file, { contentType: file.type, upsert: true })
 
       if (!uploadErr) {
-        const { data: { publicUrl } } = supabase.storage.from('payment-proofs').getPublicUrl(path)
+        // payment-proofs is a private bucket — store the object path, not a public
+        // URL. The POS resolves it to a short-lived signed URL when staff view it.
         await supabase
           .from('online_orders')
-          .update({ payment_proof_url: publicUrl })
+          .update({ payment_proof_url: path })
           .eq('id', order.id)
       } else {
         console.error('Proof upload error:', uploadErr.message)
@@ -197,7 +255,7 @@ export async function submitOrder(
     if (emails.length > 0) {
       try {
         const resend = new Resend(process.env.RESEND_API_KEY)
-        const itemsList = items.map(i =>
+        const itemsList = orderItems.map(i =>
           `• ${i.product_name} × ${i.quantity} ${i.unit_label} — ₱${(i.unit_price * i.quantity).toLocaleString('en-PH')}`
         ).join('<br>')
 

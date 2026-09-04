@@ -22,7 +22,7 @@ export default async function OrderConfirmationPage({ params }: Props) {
   const [{ data: order }, settings] = await Promise.all([
     supabase
       .from('online_orders')
-      .select('*, lines:online_order_lines(product_name, quantity, unit_label, unit_price, line_total)')
+      .select('*, lines:online_order_lines(product_id, product_name, quantity, unit_label, unit_price, line_total)')
       .eq('order_number', orderNumber)
       .single(),
     getPublicShopSettings(),
@@ -35,6 +35,19 @@ export default async function OrderConfirmationPage({ params }: Props) {
         <Link href="/" className="text-blue-600 text-sm font-medium">Back to Shop</Link>
       </div>
     )
+  }
+
+  let hasBackorderedItems = false
+  const lineProductIds = (order.lines ?? []).map((l: any) => l.product_id).filter(Boolean)
+  if (settings?.branch_id && lineProductIds.length > 0) {
+    const { data: inventory } = await supabase
+      .from('branch_inventory')
+      .select('product_id, quantity_on_hand')
+      .eq('branch_id', settings.branch_id)
+      .in('product_id', lineProductIds)
+
+    const stock = new Map((inventory ?? []).map((r: any) => [r.product_id, Number(r.quantity_on_hand ?? 0)]))
+    hasBackorderedItems = (order.lines ?? []).some((l: any) => l.product_id && l.quantity > (stock.get(l.product_id) ?? 0))
   }
 
   return (
@@ -113,6 +126,20 @@ export default async function OrderConfirmationPage({ params }: Props) {
                 </p>
               </div>
             </div>
+            {hasBackorderedItems && (
+              <div className="flex gap-3">
+                <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Clock className="w-4 h-4 text-orange-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-slate-800">Some items may take longer</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    A few items in your order are low in stock. Staff will confirm availability when they call —
+                    those items may take 1–2 extra days to arrive.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

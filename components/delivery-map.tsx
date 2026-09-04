@@ -1,6 +1,8 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { Search, X, Loader2, MapPin } from 'lucide-react'
+import { searchPlaces, type PlaceResult } from '@/lib/routing'
 import 'leaflet/dist/leaflet.css'
 
 interface DeliveryMapProps {
@@ -17,8 +19,29 @@ export function DeliveryMap({ storeLat, storeLng, onPin, pinLat, pinLng, routeCo
   const mapRef = useRef<any>(null)
   const customerMarkerRef = useRef<any>(null)
   const routeLayerRef = useRef<any>(null)
+  const placePinRef = useRef<((lat: number, lng: number) => void) | null>(null)
   const onPinRef = useRef(onPin)
   onPinRef.current = onPin
+
+  const searchWrapperRef = useRef<HTMLDivElement>(null)
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<PlaceResult[]>([])
+  const [searching, setSearching] = useState(false)
+  const [showResults, setShowResults] = useState(false)
+
+  // Close the results dropdown on outside click/tap. Using a document
+  // listener (rather than input onBlur) avoids a race on touch devices
+  // where the blur can fire — and unmount the dropdown — before the tap's
+  // click event reaches the result button.
+  useEffect(() => {
+    function handlePointerDown(e: PointerEvent) {
+      if (searchWrapperRef.current && !searchWrapperRef.current.contains(e.target as Node)) {
+        setShowResults(false)
+      }
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [])
 
   // Initialize map once
   useEffect(() => {
@@ -45,7 +68,8 @@ export function DeliveryMap({ storeLat, storeLng, onPin, pinLat, pinLng, routeCo
         iconAnchor: [8, 8],
       })
 
-      const map = L.map(containerRef.current!).setView([storeLat, storeLng], 14)
+      const map = L.map(containerRef.current!, { zoomControl: false }).setView([storeLat, storeLng], 14)
+      L.control.zoom({ position: 'bottomright' }).addTo(map)
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
         maxZoom: 19,
@@ -67,6 +91,7 @@ export function DeliveryMap({ storeLat, storeLng, onPin, pinLat, pinLng, routeCo
         }
         onPinRef.current(lat, lng)
       }
+      placePinRef.current = placePin
 
       map.on('click', (e: any) => placePin(e.latlng.lat, e.latlng.lng))
 
@@ -89,6 +114,7 @@ export function DeliveryMap({ storeLat, storeLng, onPin, pinLat, pinLng, routeCo
       mapRef.current = null
       customerMarkerRef.current = null
       routeLayerRef.current = null
+      placePinRef.current = null
     }
   }, [storeLat, storeLng])
 
@@ -133,5 +159,87 @@ export function DeliveryMap({ storeLat, storeLng, onPin, pinLat, pinLng, routeCo
     })
   }, [routeCoords])
 
-  return <div ref={containerRef} className="w-full h-64 rounded-xl overflow-hidden" style={{ zIndex: 0 }} />
+  // Debounced place search
+  useEffect(() => {
+    if (query.trim().length < 3) {
+      setResults([])
+      setSearching(false)
+      return
+    }
+    const ctrl = new AbortController()
+    setSearching(true)
+    const t = setTimeout(() => {
+      searchPlaces(query, ctrl.signal)
+        .then(r => { setResults(r); setSearching(false) })
+        .catch(() => setSearching(false))
+    }, 450)
+    return () => { clearTimeout(t); ctrl.abort() }
+  }, [query])
+
+  function selectResult(result: PlaceResult) {
+    placePinRef.current?.(result.lat, result.lng)
+    mapRef.current?.flyTo([result.lat, result.lng], 16, { duration: 1 })
+    setQuery(result.label)
+    setShowResults(false)
+    setResults([])
+  }
+
+  return (
+    <div className="space-y-2">
+      {/* Place search */}
+      <div className="relative" ref={searchWrapperRef}>
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+          <input
+            type="text"
+            value={query}
+            onChange={e => { setQuery(e.target.value); setShowResults(true) }}
+            onFocus={() => setShowResults(true)}
+            placeholder="Search for a place or landmark..."
+            className="w-full pl-11 pr-11 py-3.5 rounded-xl border-2 border-slate-300 bg-white text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 shadow-sm"
+          />
+          {searching ? (
+            <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 animate-spin" />
+          ) : query ? (
+            <button
+              type="button"
+              onClick={() => { setQuery(''); setResults([]) }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600"
+              aria-label="Clear search"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          ) : null}
+        </div>
+
+        {showResults && results.length > 0 && (
+          <div className="absolute z-[500] mt-1.5 w-full bg-white rounded-xl border-2 border-slate-200 shadow-lg overflow-hidden max-h-64 overflow-y-auto">
+            {results.map((r, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => selectResult(r)}
+                className="w-full flex items-start gap-2.5 text-left px-4 py-3 hover:bg-blue-50 border-b border-slate-100 last:border-b-0 transition-colors"
+              >
+                <MapPin className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                <span className="text-sm text-slate-700 leading-snug">{r.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {showResults && !searching && query.trim().length >= 3 && results.length === 0 && (
+          <div className="absolute z-[500] mt-1.5 w-full bg-white rounded-xl border-2 border-slate-200 shadow-lg px-4 py-3 text-sm text-slate-400">
+            No places found — try a different search, or tap the map directly.
+          </div>
+        )}
+      </div>
+
+      <div
+        ref={containerRef}
+        className="w-full h-[55vh] min-h-[360px] sm:h-[480px] rounded-xl overflow-hidden border-2 border-slate-200"
+        style={{ zIndex: 0 }}
+      />
+    </div>
+  )
 }

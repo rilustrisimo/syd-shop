@@ -15,7 +15,7 @@ import type { ShopSettings, FulfillmentType, PaymentMethod, DeliveryCalc } from 
 
 const DeliveryMap = dynamic(() => import('@/components/delivery-map').then(m => ({ default: m.DeliveryMap })), {
   ssr: false,
-  loading: () => <div className="w-full h-64 rounded-xl bg-slate-100 animate-pulse border border-slate-200" />,
+  loading: () => <div className="w-full h-[55vh] min-h-[360px] sm:h-[480px] rounded-xl bg-slate-100 animate-pulse border border-slate-200" />,
 })
 
 interface CheckoutClientProps {
@@ -129,6 +129,12 @@ export function CheckoutClient({ settings }: CheckoutClientProps) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+
+    if (needsProof && !referenceNo.trim()) {
+      setError('Please enter your payment reference number so staff can verify your payment.')
+      return
+    }
+
     setSubmitting(true)
 
     let proofFormData: FormData | null = null
@@ -168,6 +174,13 @@ export function CheckoutClient({ settings }: CheckoutClientProps) {
       </header>
 
       <form onSubmit={handleSubmit} className="max-w-5xl mx-auto px-4 lg:px-6 py-6 pb-32 lg:pb-8">
+        <div className="flex items-start gap-2.5 bg-green-50 border border-green-200 rounded-xl px-4 py-3 mb-4">
+          <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-green-800 leading-relaxed">
+            Just fill in the details below. Nothing is charged automatically — our staff will
+            <strong> call you to confirm</strong> before we prepare anything.
+          </p>
+        </div>
         <div className="lg:grid lg:grid-cols-5 lg:gap-8">
           {/* Left: Form sections */}
           <div className="lg:col-span-3 space-y-4">
@@ -275,13 +288,10 @@ export function CheckoutClient({ settings }: CheckoutClientProps) {
                           {' · '}
                           Delivery fee: <strong>{formatPrice(deliveryCalc.delivery_fee)}</strong>
                           {deliveryCalc.cod_available
-                            ? ' · ✅ COD available'
-                            : ' · 💳 COD not available at this distance'}
+                            ? ' · ✅ Cash on Delivery available'
+                            : ' · That\'s a bit far for Cash on Delivery — please pick GCash, bank transfer, or QR below'}
                         </span>
                       </div>
-                      <p className="text-xs mt-1 opacity-60 pl-6">
-                        {deliveryCalc.road_based ? '🛣️ Road distance via OpenStreetMap' : '📏 Straight-line estimate (no road data)'}
-                      </p>
                     </div>
                   ) : (
                     <p className="text-xs text-slate-400 text-center py-1">Tap on the map to pin your delivery location</p>
@@ -349,11 +359,11 @@ export function CheckoutClient({ settings }: CheckoutClientProps) {
 
                 {needsProof && (
                   <div className="space-y-3 pt-1 border-t border-slate-100">
-                    <Field label="Reference / Confirmation Number">
-                      <input value={referenceNo} onChange={e => setReferenceNo(e.target.value)}
+                    <Field label="Reference / Confirmation Number" required>
+                      <input required value={referenceNo} onChange={e => setReferenceNo(e.target.value)}
                         placeholder="e.g. GCash ref 1234567890" className={inputClass} />
                     </Field>
-                    <Field label="Upload Payment Screenshot">
+                    <Field label="Upload Payment Screenshot (Optional)">
                       <input ref={proofInputRef} type="file" accept="image/*" className="hidden"
                         onChange={e => setProofFile(e.target.files?.[0] ?? null)} />
                       {proofFile ? (
@@ -421,7 +431,7 @@ export function CheckoutClient({ settings }: CheckoutClientProps) {
                     </div>
                     <div className="flex justify-between text-sm text-slate-600">
                       <span>Delivery fee</span>
-                      <span>{fulfillment === 'pickup' ? 'Free' : deliveryCalc ? formatPrice(delivery_fee) : 'Pending pin'}</span>
+                      <span>{fulfillment === 'pickup' ? 'Free' : deliveryCalc ? formatPrice(delivery_fee) : 'Pin location first'}</span>
                     </div>
                     <div className="flex justify-between font-bold text-slate-900 pt-1 border-t border-slate-100">
                       <span>Total</span>
@@ -470,7 +480,7 @@ export function CheckoutClient({ settings }: CheckoutClientProps) {
               <div className="border-t border-slate-100 pt-2 space-y-1">
                 <div className="flex justify-between text-sm text-slate-600">
                   <span>Delivery fee</span>
-                  <span>{fulfillment === 'pickup' ? 'Free' : deliveryCalc ? formatPrice(delivery_fee) : 'Pending'}</span>
+                  <span>{fulfillment === 'pickup' ? 'Free' : deliveryCalc ? formatPrice(delivery_fee) : 'Pin location first'}</span>
                 </div>
                 <div className="flex justify-between font-bold text-slate-900">
                   <span>Total</span>

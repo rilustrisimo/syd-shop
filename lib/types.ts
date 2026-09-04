@@ -36,6 +36,8 @@ export interface ShopProduct {
   subcategory_name: string | null
   quantity_on_hand: number
   in_stock: boolean
+  qty_sold_90d: number
+  last_sale_at: string | null
 }
 
 export interface ShopProductDetail extends ShopProduct {
