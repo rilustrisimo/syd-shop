@@ -71,11 +71,11 @@ export function CatalogShell({ categories, branchId, storeName = 'SYD Constructi
             <div className="flex items-center gap-3 h-16">
               {/* Mobile menu toggle */}
               <button
-                className="lg:hidden flex-shrink-0 p-1 text-slate-400 hover:text-white transition-colors"
+                className="lg:hidden flex-shrink-0 flex items-center justify-center w-11 h-11 -ml-2 text-slate-300 hover:text-white transition-colors"
                 onClick={() => setMobileSidebarOpen(v => !v)}
                 aria-label="Categories"
               >
-                {mobileSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+                {mobileSidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
               </button>
 
               {/* Logo */}
@@ -160,35 +160,45 @@ export function CatalogShell({ categories, branchId, storeName = 'SYD Constructi
           </aside>
 
           {/* ── Mobile Category Sidebar (overlay) ── */}
+          {/* z-50: above the header/call button/sticky cart bar (all z-40) so
+              this reads as a true full-screen menu, not something other
+              floating chrome can render on top of. */}
           {mobileSidebarOpen && (
-            <div className="lg:hidden fixed inset-0 z-30 flex">
+            <div className="lg:hidden fixed inset-0 z-50 flex">
               <div className="absolute inset-0 bg-black/50" onClick={closeMobileSidebar} />
-              <div className="relative w-64 bg-white h-full overflow-y-auto shadow-xl">
-                <div className="px-4 py-3 border-b border-slate-800 bg-slate-900">
-                  <p className="text-[10px] font-bold text-[#ffc107] uppercase tracking-widest">Categories</p>
+              <div className="relative w-[85vw] max-w-sm bg-white h-full overflow-y-auto shadow-xl flex flex-col">
+                <div className="flex items-center justify-between gap-3 px-4 py-4 border-b border-slate-800 bg-slate-900 sticky top-0">
+                  <p className="text-lg font-bold text-white">Categories</p>
+                  <button
+                    onClick={closeMobileSidebar}
+                    aria-label="Close menu"
+                    className="flex items-center justify-center w-11 h-11 -mr-2 rounded-full text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
                 </div>
-                <nav className="p-2">
+                <nav className="p-3 space-y-1 pb-8">
                   <Link
                     href="/"
                     onClick={() => { clearSearch(); closeMobileSidebar() }}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-left transition-colors cursor-pointer ${
-                      !effectiveActiveCategoryId ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-slate-50'
+                    className={`w-full flex items-center justify-between px-4 py-4 rounded-xl text-base font-semibold text-left transition-colors cursor-pointer ${
+                      !effectiveActiveCategoryId ? 'bg-blue-600 text-white' : 'text-slate-800 hover:bg-slate-50 active:bg-slate-100'
                     }`}
                   >
                     All Products
-                    {!effectiveActiveCategoryId && <ChevronRight className="w-3.5 h-3.5" />}
+                    {!effectiveActiveCategoryId && <ChevronRight className="w-5 h-5" />}
                   </Link>
                   {categories.map(cat => (
                     <Link
                       key={cat.id}
                       href={categoryHref(cat.id, categories)}
                       onClick={() => { clearSearch(); closeMobileSidebar() }}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-left transition-colors cursor-pointer ${
-                        effectiveActiveCategoryId === cat.id ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-slate-50'
+                      className={`w-full flex items-center justify-between px-4 py-4 rounded-xl text-base font-semibold text-left transition-colors cursor-pointer ${
+                        effectiveActiveCategoryId === cat.id ? 'bg-blue-600 text-white' : 'text-slate-800 hover:bg-slate-50 active:bg-slate-100'
                       }`}
                     >
                       {cat.name}
-                      {effectiveActiveCategoryId === cat.id && <ChevronRight className="w-3.5 h-3.5" />}
+                      {effectiveActiveCategoryId === cat.id && <ChevronRight className="w-5 h-5" />}
                     </Link>
                   ))}
                 </nav>
