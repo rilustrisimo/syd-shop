@@ -302,24 +302,26 @@ export default function ProductDetailPage() {
             {product.in_stock ? 'Add to Cart' : 'Request This Item'}
           </button>
         ) : (
-          <div className="flex items-center gap-3">
-            <div className={`flex items-center gap-3 border rounded-xl px-3 py-2 ${
-              product.in_stock ? 'bg-blue-900/30 border-blue-700' : 'bg-amber-900/30 border-amber-700'
-            }`}>
+          <div className="flex items-center gap-2">
+            {/* Kept visually subordinate (neutral background, tighter
+                padding) to the primary "View Cart" action next to it — a
+                second strongly-colored/bordered box the same size as the
+                CTA competed with it and looked unbalanced. */}
+            <div className="flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-800 p-1">
               <button
                 onClick={() => updateQuantity(product.id, cartQty - 1)}
-                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-800 border border-slate-600 text-slate-300 hover:text-white"
+                className="w-10 h-10 flex items-center justify-center rounded-lg bg-slate-700 text-slate-200 hover:bg-slate-600 hover:text-white transition-colors"
               >
                 <Minus className="w-4 h-4" />
               </button>
               <QtyInput
                 value={cartQty}
                 onChange={(v) => updateQuantity(product.id, v)}
-                className="text-lg font-bold text-white w-14 text-center"
+                className="text-base font-bold text-white w-12 text-center"
               />
               <button
                 onClick={() => updateQuantity(product.id, cartQty + 1)}
-                className={`w-8 h-8 flex items-center justify-center rounded-full text-white ${
+                className={`w-10 h-10 flex items-center justify-center rounded-lg text-white transition-colors ${
                   product.in_stock ? 'bg-blue-600 hover:bg-blue-500' : 'bg-amber-500 hover:bg-amber-400'
                 }`}
               >
@@ -328,7 +330,7 @@ export default function ProductDetailPage() {
             </div>
             <Link
               href="/cart"
-              className="flex-1 bg-[#ffc107] hover:bg-amber-400 text-slate-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2"
+              className="flex-1 h-12 bg-[#ffc107] hover:bg-amber-400 text-slate-900 font-bold rounded-xl flex items-center justify-center gap-2"
             >
               <ShoppingCart className="w-4 h-4" />
               View Cart · {formatPrice(subtotal)}

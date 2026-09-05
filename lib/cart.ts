@@ -24,7 +24,15 @@ function readCart(): CartItem[] {
 
 function writeCart(items: CartItem[]) {
   localStorage.setItem(CART_KEY, JSON.stringify(items))
-  window.dispatchEvent(new Event(CART_UPDATED_EVENT))
+  // Deferred: writeCart runs synchronously inside a setItems updater (see
+  // addItem/updateQuantity/etc below), which itself runs during React's
+  // commit of the calling component. Dispatching synchronously here would
+  // trigger other useCart() instances' setState (e.g. CallButton) while
+  // React is still processing a different component's update, tripping
+  // "Cannot update a component while rendering a different component."
+  // A microtask lets this update finish committing first - imperceptible
+  // to the user, but plays nicely with React's render cycle.
+  queueMicrotask(() => window.dispatchEvent(new Event(CART_UPDATED_EVENT)))
 }
 
 export function useCart() {
