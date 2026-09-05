@@ -11,6 +11,14 @@ export const metadata: Metadata = {
   },
   description: 'Order quality construction materials online for delivery or pickup in Bukidnon.',
   icons: { icon: '/icon.svg' },
+  // Safari/iOS can auto-detect and auto-link plain-text phone numbers
+  // anywhere on the page; on some versions that heuristic misfires and
+  // triggers the "blocked from automatically starting a call" warning
+  // even for genuine taps on our own explicit tel: links. Disabling it
+  // sitewide leaves our deliberate tel: links (CallButton, order
+  // confirmation) completely unaffected since those are real anchors,
+  // not auto-detected text.
+  formatDetection: { telephone: false },
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
