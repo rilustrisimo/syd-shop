@@ -4,6 +4,14 @@ import { useState, useEffect, useCallback } from 'react'
 import type { CartItem } from '@/lib/types'
 
 const CART_KEY = 'syd_shop_cart'
+// Every component that calls useCart() gets its own independent local
+// state (there's no shared store/context) - it only reads localStorage
+// once on mount. The native `storage` event fires only in OTHER tabs, so
+// without this, one instance writing (e.g. a product card's "Add to
+// Cart") never notifies sibling instances elsewhere on the same page
+// (e.g. the floating call button, header cart badge) - they'd go stale
+// until they happened to re-mount. This custom event fixes same-tab sync.
+const CART_UPDATED_EVENT = 'syd-cart-updated'
 
 function readCart(): CartItem[] {
   if (typeof window === 'undefined') return []
@@ -16,6 +24,7 @@ function readCart(): CartItem[] {
 
 function writeCart(items: CartItem[]) {
   localStorage.setItem(CART_KEY, JSON.stringify(items))
+  window.dispatchEvent(new Event(CART_UPDATED_EVENT))
 }
 
 export function useCart() {
@@ -26,12 +35,20 @@ export function useCart() {
     setItems(readCart())
     setIsHydrated(true)
 
-    // Sync across tabs
+    const syncFromStorage = () => setItems(readCart())
+
+    // Cross-tab sync
     const onStorage = (e: StorageEvent) => {
-      if (e.key === CART_KEY) setItems(readCart())
+      if (e.key === CART_KEY) syncFromStorage()
     }
     window.addEventListener('storage', onStorage)
-    return () => window.removeEventListener('storage', onStorage)
+    // Same-tab sync between independent useCart() instances
+    window.addEventListener(CART_UPDATED_EVENT, syncFromStorage)
+
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      window.removeEventListener(CART_UPDATED_EVENT, syncFromStorage)
+    }
   }, [])
 
   const addItem = useCallback((item: CartItem) => {
@@ -69,7 +86,7 @@ export function useCart() {
 
   const clearCart = useCallback(() => {
     setItems([])
-    localStorage.removeItem(CART_KEY)
+    writeCart([])
   }, [])
 
   const subtotal = items.reduce((sum, i) => sum + i.unit_price * i.quantity, 0)
