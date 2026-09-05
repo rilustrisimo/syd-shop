@@ -120,7 +120,7 @@ export default function ProductDetailPage() {
 
           {/* Left: Image gallery */}
           <div>
-            <div className="relative aspect-square bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
+            <div className="relative aspect-[4/3] lg:aspect-square bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
               {images.length > 0 ? (
                 <Image
                   src={optimizedImageUrl(images[selectedImage]?.url ?? images[0].url, { width: 800 })}
@@ -268,18 +268,21 @@ export default function ProductDetailPage() {
                   </Link>
                 </div>
               )}
+            </div>
 
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
-                  <p className="text-base">🚚</p>
-                  <p className="text-xs font-semibold text-slate-700 mt-1">Home Delivery</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">₱50 within 3km</p>
-                </div>
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
-                  <p className="text-base">🏪</p>
-                  <p className="text-xs font-semibold text-slate-700 mt-1">Store Pickup</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Free — COD accepted</p>
-                </div>
+            {/* Delivery/pickup info — shown on every screen size, not just
+                desktop (previously nested inside the desktop-only add-to-cart
+                block, so mobile visitors never saw it at all). */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+                <p className="text-base">🚚</p>
+                <p className="text-xs font-semibold text-slate-700 mt-1">Home Delivery</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">₱50 within 3km</p>
+              </div>
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+                <p className="text-base">🏪</p>
+                <p className="text-xs font-semibold text-slate-700 mt-1">Store Pickup</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Free — COD accepted</p>
               </div>
             </div>
           </div>
