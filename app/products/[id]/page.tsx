@@ -261,10 +261,10 @@ export default function ProductDetailPage() {
                   </div>
                   <Link
                     href="/cart"
-                    className="flex items-center justify-center gap-2 w-full bg-[#ffc107] hover:bg-amber-400 text-slate-900 font-bold py-3.5 rounded-xl transition-colors"
+                    className="flex items-center justify-center gap-1.5 w-full min-w-0 bg-[#ffc107] hover:bg-amber-400 text-slate-900 font-bold py-3.5 px-2 rounded-xl transition-colors"
                   >
-                    <ShoppingCart className="w-4 h-4" />
-                    View Cart · {formatPrice(subtotal)}
+                    <ShoppingCart className="w-4 h-4 flex-shrink-0" />
+                    <span className="min-w-0 truncate">Cart · {formatPrice(subtotal)}</span>
                   </Link>
                 </div>
               )}
@@ -330,10 +330,13 @@ export default function ProductDetailPage() {
             </div>
             <Link
               href="/cart"
-              className="flex-1 h-12 bg-[#ffc107] hover:bg-amber-400 text-slate-900 font-bold rounded-xl flex items-center justify-center gap-2"
+              className="flex-1 min-w-0 h-12 bg-[#ffc107] hover:bg-amber-400 text-slate-900 font-bold rounded-xl flex items-center justify-center gap-1.5 px-2"
             >
-              <ShoppingCart className="w-4 h-4" />
-              View Cart · {formatPrice(subtotal)}
+              <ShoppingCart className="w-4 h-4 flex-shrink-0" />
+              {/* truncate (not wrap) so a large cart total never grows this
+                  button taller than the qty stepper next to it — the exact
+                  bug that kept resurfacing as totals got longer. */}
+              <span className="min-w-0 truncate">Cart · {formatPrice(subtotal)}</span>
             </Link>
           </div>
         )}
