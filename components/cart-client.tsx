@@ -96,78 +96,81 @@ export function CartClient({ branchId }: CartClientProps) {
               {items.map(item => {
                 const requested = isRequest(item.product_id, item.quantity)
                 return (
-                  <div key={item.product_id} className="bg-white rounded-xl border border-slate-200 p-4 flex gap-4 shadow-sm">
-                    {/* Image */}
-                    <Link href={`/products/${item.product_id}`} className="relative w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-slate-100">
-                      {item.image_url ? (
-                        <Image
-                          src={optimizedImageUrl(item.image_url, { width: 150 })}
-                          alt={item.product_name}
-                          fill
-                          className="object-cover"
-                          unoptimized
-                        />
-                      ) : (
-                        <div className="flex items-center justify-center h-full">
-                          <Package className="w-8 h-8 text-slate-300" />
-                        </div>
-                      )}
-                    </Link>
+                  <div key={item.product_id} className="relative bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                    {/* Delete — top-right corner, out of the way of the qty/price
+                        row below so that row has room to breathe on mobile even
+                        for large bulk quantities/totals. */}
+                    <button
+                      onClick={() => removeItem(item.product_id)}
+                      className="absolute top-3 right-3 text-slate-300 hover:text-red-400 transition-colors p-1"
+                      aria-label="Remove item"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
 
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start gap-2">
-                        <Link href={`/products/${item.product_id}`} className="min-w-0">
+                    <div className="flex gap-4">
+                      {/* Image */}
+                      <Link href={`/products/${item.product_id}`} className="relative w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-slate-100">
+                        {item.image_url ? (
+                          <Image
+                            src={optimizedImageUrl(item.image_url, { width: 150 })}
+                            alt={item.product_name}
+                            fill
+                            className="object-cover"
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="flex items-center justify-center h-full">
+                            <Package className="w-8 h-8 text-slate-300" />
+                          </div>
+                        )}
+                      </Link>
+
+                      {/* Info */}
+                      <div className="flex-1 min-w-0 pr-6">
+                        <Link href={`/products/${item.product_id}`}>
                           <p className="text-sm font-medium text-slate-900 leading-snug line-clamp-2 hover:text-blue-600 transition-colors">
                             {item.product_name}
                           </p>
                         </Link>
                         {requested && (
-                          <span className="flex-shrink-0 text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-2 py-0.5">
+                          <span className="inline-block mt-1 text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-2 py-0.5">
                             On Request
                           </span>
                         )}
-                      </div>
-                      <p className="text-xs text-slate-400 mt-0.5">{formatPrice(item.unit_price)} per {item.unit_label}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">{formatPrice(item.unit_price)} per {item.unit_label}</p>
 
-                      <div className="flex items-center justify-between mt-3">
-                        {/* Qty stepper */}
-                        <div className={`flex items-center gap-2 rounded-lg px-2 py-1 border ${
-                          requested ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200'
-                        }`}>
-                          <button
-                            onClick={() => updateQuantity(item.product_id, item.quantity - 1)}
-                            className={`w-6 h-6 flex items-center justify-center rounded-md transition-colors hover:bg-white ${
-                              requested ? 'text-amber-600 hover:text-amber-700' : 'text-blue-600 hover:text-blue-700'
-                            }`}
-                          >
-                            <Minus className="w-3 h-3" />
-                          </button>
-                          <QtyInput
-                            value={item.quantity}
-                            onChange={(v) => updateQuantity(item.product_id, v)}
-                            className={`w-14 text-sm font-bold text-center ${requested ? 'text-amber-900' : 'text-blue-900'}`}
-                          />
-                          <button
-                            onClick={() => updateQuantity(item.product_id, item.quantity + 1)}
-                            className={`w-6 h-6 flex items-center justify-center rounded-md text-white transition-colors ${
-                              requested ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'
-                            }`}
-                          >
-                            <Plus className="w-3 h-3" />
-                          </button>
-                        </div>
+                        <div className="flex items-center flex-wrap justify-between gap-x-3 gap-y-2 mt-3">
+                          {/* Qty stepper */}
+                          <div className={`flex items-center gap-2 rounded-lg px-2 py-1 border ${
+                            requested ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200'
+                          }`}>
+                            <button
+                              onClick={() => updateQuantity(item.product_id, item.quantity - 1)}
+                              className={`w-6 h-6 flex items-center justify-center rounded-md transition-colors hover:bg-white ${
+                                requested ? 'text-amber-600 hover:text-amber-700' : 'text-blue-600 hover:text-blue-700'
+                              }`}
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <QtyInput
+                              value={item.quantity}
+                              onChange={(v) => updateQuantity(item.product_id, v)}
+                              className={`w-14 text-sm font-bold text-center ${requested ? 'text-amber-900' : 'text-blue-900'}`}
+                            />
+                            <button
+                              onClick={() => updateQuantity(item.product_id, item.quantity + 1)}
+                              className={`w-6 h-6 flex items-center justify-center rounded-md text-white transition-colors ${
+                                requested ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'
+                              }`}
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
 
-                        <div className="flex items-center gap-3">
-                          <p className="text-sm font-bold text-slate-900">
+                          <p className="text-sm font-bold text-slate-900 ml-auto">
                             {formatPrice(item.unit_price * item.quantity)}
                           </p>
-                          <button
-                            onClick={() => removeItem(item.product_id)}
-                            className="text-slate-300 hover:text-red-400 transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
                         </div>
                       </div>
                     </div>
