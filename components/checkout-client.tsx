@@ -72,6 +72,11 @@ export function CheckoutClient({ settings }: CheckoutClientProps) {
 
   const proofInputRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<AbortController | null>(null)
+  // Guards the empty-cart redirect below from firing when clearCart() runs
+  // as part of a successful submission (see handleSubmit) - without this,
+  // clearing the cart before navigating to the order confirmation page
+  // races with that redirect, which can send the user home instead.
+  const orderSubmittedRef = useRef(false)
 
   useEffect(() => {
     if (fulfillment !== 'delivery' || pinLat == null || pinLng == null) {
@@ -111,7 +116,7 @@ export function CheckoutClient({ settings }: CheckoutClientProps) {
   }, [fulfillment])
 
   useEffect(() => {
-    if (isHydrated && items.length === 0) router.replace('/')
+    if (isHydrated && items.length === 0 && !orderSubmittedRef.current) router.replace('/')
   }, [isHydrated, items.length, router])
 
   const codBlockedByAmount = subtotal >= COD_MAX_SUBTOTAL
@@ -155,6 +160,7 @@ export function CheckoutClient({ settings }: CheckoutClientProps) {
       return
     }
 
+    orderSubmittedRef.current = true
     clearCart()
     router.push(`/order/${result.orderNumber}`)
   }
