@@ -12,21 +12,25 @@ interface CallButtonProps {
 // checkout online — a safety net if the site trips someone up. Bottom-left
 // so it never collides with the cart FAB (bottom-right, desktop only).
 //
-// Hidden on product detail/cart/checkout: those pages already have their
-// own prominent sticky action bar and a specific task the visitor is mid-
-// way through, so a second floating CTA is redundant there — and worse,
-// a fixed-position button combined with a fixed bottom bar leaves a thin
-// vertical corridor where normal (non-fixed) page content keeps ending up
-// sandwiched between them on shorter viewports (seen colliding with both
-// the category menu and, on this page, the price/thumbnails depending on
-// content length — tuning the offset per-page doesn't hold up, since any
-// fixed position can coincide with *something* as content varies).
+// Hidden on product detail/cart/checkout/order-confirmation: those pages
+// already have their own prominent sticky action bar (or, for the order
+// confirmation page, its own contact/"call us" section), so a second
+// floating CTA is redundant there — and worse, a fixed-position button
+// combined with a fixed bottom bar (or just varying page length) leaves a
+// thin vertical corridor where normal (non-fixed) page content keeps
+// ending up sandwiched under it on shorter viewports (seen colliding with
+// the category menu, product price/thumbnails, and the order summary —
+// tuning the offset per-page doesn't hold up, since any fixed position
+// can coincide with *something* as content varies).
 export function CallButton({ phone }: CallButtonProps) {
   const pathname = usePathname()
   const { itemCount } = useCart()
 
   const hasOwnActionBar =
-    pathname?.startsWith('/products/') || pathname === '/cart' || pathname === '/checkout'
+    pathname?.startsWith('/products/') ||
+    pathname?.startsWith('/order/') ||
+    pathname === '/cart' ||
+    pathname === '/checkout'
   if (hasOwnActionBar) return null
 
   // Home/category pages show a floating "View Cart" bar once the cart has

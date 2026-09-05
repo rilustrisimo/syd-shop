@@ -64,12 +64,18 @@ export default async function OrderConfirmationPage({ params }: Props) {
       <div className="max-w-2xl mx-auto px-4 pt-8 pb-16 space-y-4">
         {/* Success header */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 text-center space-y-3">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
-            <CheckCircle className="w-9 h-9 text-green-600" />
+          <div className="relative w-16 h-16 mx-auto">
+            <div className="absolute inset-0 bg-green-400 rounded-full animate-ping opacity-30" />
+            <div className="relative w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+              <CheckCircle className="w-9 h-9 text-green-600" />
+            </div>
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Order Placed!</h1>
-            <p className="text-slate-500 text-sm mt-1">Thank you for your order</p>
+            <h1 className="text-2xl font-bold text-slate-900">🎉 Order Submitted!</h1>
+            <p className="text-slate-500 text-sm mt-1">
+              {order.customer_name ? `Thanks, ${order.customer_name.split(' ')[0]}!` : 'Thanks so much!'}{' '}
+              We&apos;ve got your order and we&apos;re excited to get it ready for you.
+            </p>
           </div>
           <div className="inline-block bg-slate-900 border border-slate-700 rounded-xl px-5 py-2">
             <p className="text-xs text-[#ffc107]/70 font-medium uppercase tracking-wide">Order Number</p>
@@ -88,9 +94,10 @@ export default async function OrderConfirmationPage({ params }: Props) {
                 <Phone className="w-4 h-4 text-blue-600" />
               </div>
               <div>
-                <p className="text-sm font-medium text-slate-800">Staff will contact you</p>
+                <p className="text-sm font-medium text-slate-800">An agent will reach out shortly 📞</p>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  We'll call or text <strong>{order.customer_phone}</strong> to confirm your order.
+                  One of our team will call or text <strong>{order.customer_phone}</strong> to confirm the
+                  details and finalize your order.
                 </p>
               </div>
             </div>
@@ -190,9 +197,9 @@ export default async function OrderConfirmationPage({ params }: Props) {
         {/* Questions */}
         {settings?.store_phone && (
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm">
-            <p className="font-semibold text-blue-900">Questions?</p>
+            <p className="font-semibold text-blue-900">Need anything in the meantime? 😊</p>
             <p className="text-blue-800 mt-0.5">
-              Call or text us: <a href={`tel:${settings.store_phone}`} className="font-bold underline">{settings.store_phone}</a>
+              We&apos;re happy to help — call or text us: <a href={`tel:${settings.store_phone}`} className="font-bold underline">{settings.store_phone}</a>
             </p>
             {settings.store_address && (
               <p className="text-blue-600 text-xs mt-1">{settings.store_address}</p>
