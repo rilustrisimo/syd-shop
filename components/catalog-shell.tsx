@@ -1,6 +1,6 @@
 'use client'
 
-import { useDeferredValue, useMemo, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -43,6 +43,16 @@ export function CatalogShell({ categories, branchId, storeName = 'SYD Constructi
   function closeMobileSidebar() {
     setMobileSidebarOpen(false)
   }
+
+  // Lock the page behind the drawer while it's open — otherwise scrolling
+  // to the top/bottom of the category list "chains" into scrolling the
+  // page underneath, which feels janky on mobile.
+  useEffect(() => {
+    if (!mobileSidebarOpen) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previousOverflow }
+  }, [mobileSidebarOpen])
 
   // Picking a category (or "All Products") while a search is active would
   // otherwise keep showing global search results instead of that category's
@@ -123,11 +133,17 @@ export function CatalogShell({ categories, branchId, storeName = 'SYD Constructi
         <div className="flex-1 flex max-w-7xl mx-auto w-full px-4 lg:px-6 gap-6 py-6">
           {/* ── Desktop Category Sidebar ── */}
           <aside className="hidden lg:block w-56 flex-shrink-0">
-            <div className="sticky top-24 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-              <div className="px-4 py-3 border-b border-slate-100 bg-slate-900">
+            {/* max-h + overflow-y-auto: without its own scroll container, a
+                long category list has no way to scroll independently -
+                hovering it and scrolling just moves the whole page (and the
+                products with it), and categories past the viewport edge are
+                simply unreachable. Capped to the visible height below the
+                sticky offset, with its own scrollbar once content overflows. */}
+            <div className="sticky top-24 max-h-[calc(100vh-7rem)] flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-100 bg-slate-900 flex-shrink-0">
                 <p className="text-[10px] font-bold text-[#ffc107] uppercase tracking-widest">Categories</p>
               </div>
-              <nav className="p-2">
+              <nav className="p-2 overflow-y-auto">
                 <Link
                   href="/"
                   onClick={clearSearch}
@@ -166,7 +182,7 @@ export function CatalogShell({ categories, branchId, storeName = 'SYD Constructi
           {mobileSidebarOpen && (
             <div className="lg:hidden fixed inset-0 z-50 flex">
               <div className="absolute inset-0 bg-black/50" onClick={closeMobileSidebar} />
-              <div className="relative w-[85vw] max-w-sm bg-white h-full overflow-y-auto shadow-xl flex flex-col">
+              <div className="relative w-[85vw] max-w-sm bg-white h-full overflow-y-auto overscroll-contain shadow-xl flex flex-col">
                 <div className="flex items-center justify-between gap-3 px-4 py-4 border-b border-slate-800 bg-slate-900 sticky top-0">
                   <p className="text-lg font-bold text-white">Categories</p>
                   <button
