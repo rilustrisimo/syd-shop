@@ -127,8 +127,8 @@ export function CartClient({ branchId }: CartClientProps) {
                       </Link>
 
                       {/* Info */}
-                      <div className="flex-1 min-w-0 pr-6">
-                        <Link href={`/products/${item.product_id}`}>
+                      <div className="flex-1 min-w-0">
+                        <Link href={`/products/${item.product_id}`} className="block pr-6">
                           <p className="text-sm font-medium text-slate-900 leading-snug line-clamp-2 hover:text-blue-600 transition-colors">
                             {item.product_name}
                           </p>
@@ -142,7 +142,7 @@ export function CartClient({ branchId }: CartClientProps) {
 
                         <div className="flex items-center flex-wrap justify-between gap-x-3 gap-y-2 mt-3">
                           {/* Qty stepper */}
-                          <div className={`flex items-center gap-2 rounded-lg px-2 py-1 border ${
+                          <div className={`flex items-center gap-1.5 rounded-lg px-1.5 py-1 border ${
                             requested ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200'
                           }`}>
                             <button
@@ -156,7 +156,7 @@ export function CartClient({ branchId }: CartClientProps) {
                             <QtyInput
                               value={item.quantity}
                               onChange={(v) => updateQuantity(item.product_id, v)}
-                              className={`w-14 text-sm font-bold text-center ${requested ? 'text-amber-900' : 'text-blue-900'}`}
+                              className={`w-12 text-sm font-bold text-center ${requested ? 'text-amber-900' : 'text-blue-900'}`}
                             />
                             <button
                               onClick={() => updateQuantity(item.product_id, item.quantity + 1)}
