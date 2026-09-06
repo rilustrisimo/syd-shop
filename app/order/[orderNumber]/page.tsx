@@ -186,7 +186,12 @@ export default async function OrderConfirmationPage({ params }: Props) {
             </div>
 
             <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-400 space-y-1">
-              <p>Payment: <span className="capitalize text-slate-600">{order.payment_method.replace('_', ' ')}</span></p>
+              <p>
+                Payment: <span className="capitalize text-slate-600">{order.payment_method.replace('_', ' ')}</span>
+                {order.payment_method === 'qr' && order.payment_qr_label && (
+                  <span className="text-slate-600"> ({order.payment_qr_label})</span>
+                )}
+              </p>
               {order.payment_reference_no && (
                 <p>Reference: <span className="text-slate-600">{order.payment_reference_no}</span></p>
               )}

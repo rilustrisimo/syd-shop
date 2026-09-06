@@ -25,6 +25,7 @@ export interface CheckoutPayload {
   pinLat: number | null
   pinLng: number | null
   paymentMethod: PaymentMethod
+  qrLabel: string | null
   referenceNo: string
   notes: string
   items: CartItem[]
@@ -41,7 +42,7 @@ export async function submitOrder(
 ): Promise<CheckoutResult> {
   const {
     name, phone, fulfillment, street, barangay, municipality, province,
-    pinLat, pinLng, paymentMethod, referenceNo, notes, items,
+    pinLat, pinLng, paymentMethod, qrLabel, referenceNo, notes, items,
   } = payload
 
   if (!name.trim() || !phone.trim()) return { error: 'Name and phone are required.' }
@@ -195,6 +196,7 @@ export async function submitOrder(
       longitude: pinLng,
       distance_km: distance_km || null,
       payment_method: paymentMethod,
+      payment_qr_label: paymentMethod === 'qr' ? qrLabel : null,
       payment_status: paymentMethod === 'cod' ? 'unpaid' : 'submitted',
       payment_reference_no: referenceNo || null,
       subtotal,
@@ -268,7 +270,7 @@ export async function submitOrder(
             <p><strong>Order:</strong> ${order.order_number}</p>
             <p><strong>Customer:</strong> ${name.trim()} · ${normalizedPhone}</p>
             <p><strong>Fulfillment:</strong> ${fulfillment === 'delivery' ? `Delivery (${distance_km} km · ₱${delivery_fee} delivery fee)` : 'Pickup'}</p>
-            <p><strong>Payment:</strong> ${paymentMethod.replace('_', ' ').toUpperCase()}${referenceNo ? ` — Ref: ${referenceNo}` : ''}</p>
+            <p><strong>Payment:</strong> ${paymentMethod.replace('_', ' ').toUpperCase()}${paymentMethod === 'qr' && qrLabel ? ` (${qrLabel})` : ''}${referenceNo ? ` — Ref: ${referenceNo}` : ''}</p>
             <hr/>
             <p><strong>Items:</strong><br>${itemsList}</p>
             <hr/>

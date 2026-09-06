@@ -61,7 +61,7 @@ export interface CartItem {
 }
 
 export type FulfillmentType = 'delivery' | 'pickup'
-export type PaymentMethod = 'cod' | 'gcash' | 'bank_transfer' | 'qr'
+export type PaymentMethod = 'cod' | 'bank_transfer' | 'qr'
 
 export interface ShopQrCode {
   id: string

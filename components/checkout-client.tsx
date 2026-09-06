@@ -65,6 +65,7 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
   const [deliveryCalc, setDeliveryCalc] = useState<DeliveryCalc | null>(null)
   const [routeCoords, setRouteCoords] = useState<[number, number][] | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod')
+  const [selectedQrId, setSelectedQrId] = useState<string | null>(null)
   const [referenceNo, setReferenceNo] = useState('')
   const [proofFile, setProofFile] = useState<File | null>(null)
   const [notes, setNotes] = useState('')
@@ -103,7 +104,8 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
         setRouteCoords(coords ?? null)
         setDeliveryLoading(false)
         if (!calc.cod_available && paymentMethod === 'cod') {
-          setPaymentMethod('gcash')
+          setPaymentMethod('bank_transfer')
+          setSelectedQrId(null)
         }
       })
       .catch(err => {
@@ -124,12 +126,16 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
   const codBlockedByAmount = subtotal >= COD_MAX_SUBTOTAL
 
   useEffect(() => {
-    if (codBlockedByAmount && paymentMethod === 'cod') setPaymentMethod('gcash')
+    if (codBlockedByAmount && paymentMethod === 'cod') {
+      setPaymentMethod('bank_transfer')
+      setSelectedQrId(null)
+    }
   }, [codBlockedByAmount, paymentMethod])
 
   const delivery_fee = fulfillment === 'delivery' ? (deliveryCalc?.delivery_fee ?? 0) : 0
   const total = subtotal + delivery_fee
-  const needsProof = ['gcash', 'bank_transfer', 'qr'].includes(paymentMethod)
+  const needsProof = paymentMethod === 'bank_transfer' || paymentMethod === 'qr'
+  const selectedQr = paymentMethod === 'qr' ? qrCodes.find(qr => qr.id === selectedQrId) ?? null : null
 
   // Don't render until localStorage is read — prevents flash redirect on mount
   if (!isHydrated || items.length === 0) return null
@@ -143,6 +149,11 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
       return
     }
 
+    if (paymentMethod === 'qr' && !selectedQr) {
+      setError('Please select which QR code you paid with.')
+      return
+    }
+
     setSubmitting(true)
 
     let proofFormData: FormData | null = null
@@ -152,7 +163,7 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
     }
 
     const result = await submitOrder(
-      { name, phone, fulfillment, street, barangay, municipality, province, pinLat, pinLng, paymentMethod, referenceNo, notes, items },
+      { name, phone, fulfillment, street, barangay, municipality, province, pinLat, pinLng, paymentMethod, qrLabel: selectedQr?.label ?? null, referenceNo, notes, items },
       proofFormData
     )
 
@@ -319,47 +330,62 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-2">
-                  {([
-                    { value: 'cod', label: 'Cash on Delivery', emoji: '💵', disabled: codBlockedByAmount || (fulfillment === 'delivery' && deliveryCalc != null && !deliveryCalc.cod_available) },
-                    { value: 'gcash', label: 'GCash', emoji: '📱', disabled: false },
-                    { value: 'bank_transfer', label: 'Bank Transfer', emoji: '🏦', disabled: false },
-                    { value: 'qr', label: 'QR Code', emoji: '📷', disabled: false },
-                  ] as { value: PaymentMethod; label: string; emoji: string; disabled: boolean }[]).map(opt => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      disabled={opt.disabled}
-                      onClick={() => !opt.disabled && setPaymentMethod(opt.value)}
-                      className={`p-3 rounded-xl border-2 text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                        paymentMethod === opt.value
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-slate-200 bg-white hover:border-blue-200'
-                      }`}
-                    >
-                      <span className="text-xl">{opt.emoji}</span>
-                      <p className={`text-xs font-semibold mt-1 ${paymentMethod === opt.value ? 'text-blue-700' : 'text-slate-600'}`}>
-                        {opt.label}
-                      </p>
-                    </button>
-                  ))}
+                  <button
+                    type="button"
+                    disabled={codBlockedByAmount || (fulfillment === 'delivery' && deliveryCalc != null && !deliveryCalc.cod_available)}
+                    onClick={() => { setPaymentMethod('cod'); setSelectedQrId(null) }}
+                    className={`p-3 rounded-xl border-2 text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                      paymentMethod === 'cod' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white hover:border-blue-200'
+                    }`}
+                  >
+                    <span className="text-xl">💵</span>
+                    <p className={`text-xs font-semibold mt-1 ${paymentMethod === 'cod' ? 'text-blue-700' : 'text-slate-600'}`}>
+                      Cash on Delivery
+                    </p>
+                  </button>
+
+                  {qrCodes.map(qr => {
+                    const isSelected = paymentMethod === 'qr' && selectedQrId === qr.id
+                    return (
+                      <button
+                        key={qr.id}
+                        type="button"
+                        onClick={() => { setPaymentMethod('qr'); setSelectedQrId(qr.id) }}
+                        className={`p-3 rounded-xl border-2 text-left transition-all ${
+                          isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white hover:border-blue-200'
+                        }`}
+                      >
+                        <span className="text-xl">📷</span>
+                        <p className={`text-xs font-semibold mt-1 ${isSelected ? 'text-blue-700' : 'text-slate-600'}`}>
+                          {qr.label}
+                        </p>
+                      </button>
+                    )
+                  })}
+
+                  <button
+                    type="button"
+                    onClick={() => { setPaymentMethod('bank_transfer'); setSelectedQrId(null) }}
+                    className={`p-3 rounded-xl border-2 text-left transition-all ${
+                      paymentMethod === 'bank_transfer' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white hover:border-blue-200'
+                    }`}
+                  >
+                    <span className="text-xl">🏦</span>
+                    <p className={`text-xs font-semibold mt-1 ${paymentMethod === 'bank_transfer' ? 'text-blue-700' : 'text-slate-600'}`}>
+                      Bank Transfer
+                    </p>
+                  </button>
                 </div>
 
-                {paymentMethod === 'gcash' && settings.gcash_number && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
-                    <p className="font-semibold text-blue-900 text-xs uppercase tracking-wide mb-1">Send GCash to</p>
-                    <p className="text-blue-900 font-medium">{settings.gcash_name}</p>
-                    <p className="text-blue-700">{settings.gcash_number}</p>
+                {paymentMethod === 'qr' && selectedQr && (
+                  <div className="flex flex-col items-center gap-2 py-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={selectedQr.image_url} alt={selectedQr.label} className="w-48 h-48 object-contain rounded-xl border border-slate-200 bg-white" />
+                    <p className="text-xs text-slate-500">Scan to pay via {selectedQr.label}</p>
                   </div>
                 )}
                 {paymentMethod === 'bank_transfer' && (
                   <div className="space-y-2">
-                    {settings.bank_account_no && (
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
-                        <p className="font-semibold text-blue-900 text-xs uppercase tracking-wide mb-1">{settings.bank_name}</p>
-                        <p className="text-blue-900 font-medium">{settings.bank_account_name}</p>
-                        <p className="text-blue-700">{settings.bank_account_no}</p>
-                      </div>
-                    )}
                     {bankAccounts.map(account => (
                       <div key={account.id} className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
                         <p className="font-semibold text-blue-900 text-xs uppercase tracking-wide mb-1">{account.bank_name}</p>
@@ -367,28 +393,6 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
                         <p className="text-blue-700">{account.account_number}</p>
                       </div>
                     ))}
-                  </div>
-                )}
-                {paymentMethod === 'qr' && (
-                  <div className="space-y-3">
-                    {settings.qr_code_url && (
-                      <div className="flex flex-col items-center gap-2 py-2">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={settings.qr_code_url} alt="QR Code" className="w-48 h-48 object-contain rounded-xl border border-slate-200" />
-                        <p className="text-xs text-slate-500">Scan to pay</p>
-                      </div>
-                    )}
-                    {qrCodes.length > 0 && (
-                      <div className="grid grid-cols-2 gap-3">
-                        {qrCodes.map(qr => (
-                          <div key={qr.id} className="flex flex-col items-center gap-1.5 bg-blue-50 border border-blue-200 rounded-xl p-3">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={qr.image_url} alt={qr.label} className="w-full aspect-square object-contain rounded-lg bg-white border border-slate-200" />
-                            <p className="text-xs font-semibold text-blue-900">{qr.label}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 )}
 
