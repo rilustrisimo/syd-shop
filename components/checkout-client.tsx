@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { MapPin, AlertTriangle, CheckCircle, Upload, X, ArrowLeft, Package, ZoomIn } from 'lucide-react'
+import { MapPin, AlertTriangle, CheckCircle, Upload, X, ArrowLeft, Package, ZoomIn, Download } from 'lucide-react'
 import { useCart } from '@/lib/cart'
 import { calcFeeFromDistance, COD_MAX_SUBTOTAL } from '@/lib/haversine'
 import { getRoadDistance } from '@/lib/routing'
@@ -190,6 +190,29 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
     router.push(`/order/${result.orderNumber}`)
   }
 
+  // Fetches the QR as a blob so the save works cross-origin (Supabase
+  // Storage is a different origin than the shop, and the `download`
+  // attribute alone is unreliable across origins). Falls back to
+  // opening the image in a new tab so the customer can still long-press
+  // to save it manually if the fetch is ever blocked.
+  async function handleDownloadQr(qr: ShopQrCode) {
+    try {
+      const res = await fetch(qr.image_url)
+      const blob = await res.blob()
+      const ext = blob.type.split('/')[1] || 'png'
+      const objectUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = objectUrl
+      a.download = `${qr.label.toLowerCase().replace(/\s+/g, '-')}.${ext}`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(objectUrl)
+    } catch {
+      window.open(qr.image_url, '_blank')
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
@@ -369,7 +392,7 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
                       >
                         {qr.logo_url ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={qr.logo_url} alt="" className="w-6 h-6 object-contain rounded-full bg-white" />
+                          <img src={qr.logo_url} alt="" className="h-8 max-w-[76px] object-contain object-left" />
                         ) : (
                           <span className="text-xl">📷</span>
                         )}
@@ -408,6 +431,14 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
                       </span>
                     </button>
                     <p className="text-xs text-slate-500">Scan to pay via {selectedQr.label} · Tap to zoom</p>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadQr(selectedQr)}
+                      className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Download QR to upload in your banking app
+                    </button>
                   </div>
                 )}
                 {paymentMethod === 'bank_transfer' && (
@@ -600,6 +631,14 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
               className="w-[min(85vw,420px)] aspect-square object-contain rounded-xl bg-white"
             />
             <p className="text-sm text-white/80">Scan to pay via {selectedQr.label}</p>
+            <button
+              type="button"
+              onClick={() => handleDownloadQr(selectedQr)}
+              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Download QR
+            </button>
           </div>
         </div>
       )}
