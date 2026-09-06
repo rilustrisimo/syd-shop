@@ -12,7 +12,7 @@ import { getRoadDistance } from '@/lib/routing'
 import { formatPrice } from '@/components/currency'
 import { optimizedImageUrl } from '@/lib/image'
 import { submitOrder } from '@/app/checkout/actions'
-import type { ShopSettings, FulfillmentType, PaymentMethod, DeliveryCalc } from '@/lib/types'
+import type { ShopSettings, FulfillmentType, PaymentMethod, DeliveryCalc, ShopQrCode, ShopBankAccount } from '@/lib/types'
 
 const DeliveryMap = dynamic(() => import('@/components/delivery-map').then(m => ({ default: m.DeliveryMap })), {
   ssr: false,
@@ -21,6 +21,8 @@ const DeliveryMap = dynamic(() => import('@/components/delivery-map').then(m => 
 
 interface CheckoutClientProps {
   settings: ShopSettings
+  qrCodes: ShopQrCode[]
+  bankAccounts: ShopBankAccount[]
 }
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
@@ -47,7 +49,7 @@ function Field({ label, required, children }: { label: string; required?: boolea
 
 const inputClass = "w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-colors bg-white"
 
-export function CheckoutClient({ settings }: CheckoutClientProps) {
+export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClientProps) {
   const router = useRouter()
   const { items, subtotal, clearCart, isHydrated } = useCart()
 
@@ -349,18 +351,44 @@ export function CheckoutClient({ settings }: CheckoutClientProps) {
                     <p className="text-blue-700">{settings.gcash_number}</p>
                   </div>
                 )}
-                {paymentMethod === 'bank_transfer' && settings.bank_account_no && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
-                    <p className="font-semibold text-blue-900 text-xs uppercase tracking-wide mb-1">{settings.bank_name}</p>
-                    <p className="text-blue-900 font-medium">{settings.bank_account_name}</p>
-                    <p className="text-blue-700">{settings.bank_account_no}</p>
+                {paymentMethod === 'bank_transfer' && (
+                  <div className="space-y-2">
+                    {settings.bank_account_no && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+                        <p className="font-semibold text-blue-900 text-xs uppercase tracking-wide mb-1">{settings.bank_name}</p>
+                        <p className="text-blue-900 font-medium">{settings.bank_account_name}</p>
+                        <p className="text-blue-700">{settings.bank_account_no}</p>
+                      </div>
+                    )}
+                    {bankAccounts.map(account => (
+                      <div key={account.id} className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+                        <p className="font-semibold text-blue-900 text-xs uppercase tracking-wide mb-1">{account.bank_name}</p>
+                        <p className="text-blue-900 font-medium">{account.account_name}</p>
+                        <p className="text-blue-700">{account.account_number}</p>
+                      </div>
+                    ))}
                   </div>
                 )}
-                {paymentMethod === 'qr' && settings.qr_code_url && (
-                  <div className="flex flex-col items-center gap-2 py-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={settings.qr_code_url} alt="QR Code" className="w-48 h-48 object-contain rounded-xl border border-slate-200" />
-                    <p className="text-xs text-slate-500">Scan to pay</p>
+                {paymentMethod === 'qr' && (
+                  <div className="space-y-3">
+                    {settings.qr_code_url && (
+                      <div className="flex flex-col items-center gap-2 py-2">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={settings.qr_code_url} alt="QR Code" className="w-48 h-48 object-contain rounded-xl border border-slate-200" />
+                        <p className="text-xs text-slate-500">Scan to pay</p>
+                      </div>
+                    )}
+                    {qrCodes.length > 0 && (
+                      <div className="grid grid-cols-2 gap-3">
+                        {qrCodes.map(qr => (
+                          <div key={qr.id} className="flex flex-col items-center gap-1.5 bg-blue-50 border border-blue-200 rounded-xl p-3">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={qr.image_url} alt={qr.label} className="w-full aspect-square object-contain rounded-lg bg-white border border-slate-200" />
+                            <p className="text-xs font-semibold text-blue-900">{qr.label}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 

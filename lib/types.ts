@@ -63,6 +63,21 @@ export interface CartItem {
 export type FulfillmentType = 'delivery' | 'pickup'
 export type PaymentMethod = 'cod' | 'gcash' | 'bank_transfer' | 'qr'
 
+export interface ShopQrCode {
+  id: string
+  label: string
+  image_url: string
+  sort_order: number
+}
+
+export interface ShopBankAccount {
+  id: string
+  bank_name: string
+  account_name: string
+  account_number: string
+  sort_order: number
+}
+
 export interface DeliveryCalc {
   distance_km: number
   delivery_fee: number

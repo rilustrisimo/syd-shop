@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase/client'
 import { getProducts } from '@/lib/supabase/queries/products'
-import type { ShopSettings, PublicShopSettings, ShopCategory } from '@/lib/types'
+import type { ShopSettings, PublicShopSettings, ShopCategory, ShopQrCode, ShopBankAccount } from '@/lib/types'
 
 // Full settings including coordinates — server-side only
 export async function getShopSettings(): Promise<ShopSettings | null> {
@@ -37,6 +37,38 @@ export async function getPublicShopSettings(): Promise<PublicShopSettings | null
     return null
   }
   return data as PublicShopSettings
+}
+
+// Active payment QR codes for checkout (e.g. GCash, BDO, BPI, GoTyme) —
+// managed by staff in the POS admin settings.
+export async function getShopQrCodes(): Promise<ShopQrCode[]> {
+  const { data, error } = await supabase
+    .from('shop_qr_codes')
+    .select('id, label, image_url, sort_order')
+    .eq('is_active', true)
+    .order('sort_order')
+
+  if (error) {
+    console.error('Failed to fetch shop QR codes:', error.message)
+    return []
+  }
+  return data as ShopQrCode[]
+}
+
+// Active bank transfer accounts for checkout — managed by staff in the
+// POS admin settings.
+export async function getShopBankAccounts(): Promise<ShopBankAccount[]> {
+  const { data, error } = await supabase
+    .from('shop_bank_accounts')
+    .select('id, bank_name, account_name, account_number, sort_order')
+    .eq('is_active', true)
+    .order('sort_order')
+
+  if (error) {
+    console.error('Failed to fetch shop bank accounts:', error.message)
+    return []
+  }
+  return data as ShopBankAccount[]
 }
 
 export async function getCategories() {
