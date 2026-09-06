@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { MapPin, AlertTriangle, CheckCircle, Upload, X, ArrowLeft, Package } from 'lucide-react'
+import { MapPin, AlertTriangle, CheckCircle, Upload, X, ArrowLeft, Package, ZoomIn } from 'lucide-react'
 import { useCart } from '@/lib/cart'
 import { calcFeeFromDistance, COD_MAX_SUBTOTAL } from '@/lib/haversine'
 import { getRoadDistance } from '@/lib/routing'
@@ -66,6 +66,7 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
   const [routeCoords, setRouteCoords] = useState<[number, number][] | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod')
   const [selectedQrId, setSelectedQrId] = useState<string | null>(null)
+  const [zoomedQr, setZoomedQr] = useState(false)
   const [referenceNo, setReferenceNo] = useState('')
   const [proofFile, setProofFile] = useState<File | null>(null)
   const [notes, setNotes] = useState('')
@@ -118,6 +119,17 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
   useEffect(() => {
     if (fulfillment === 'pickup') setPaymentMethod('cod')
   }, [fulfillment])
+
+  useEffect(() => {
+    if (!zoomedQr) return
+    document.body.style.overflow = 'hidden'
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') setZoomedQr(false) }
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.body.style.overflow = ''
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [zoomedQr])
 
   useEffect(() => {
     if (isHydrated && items.length === 0 && !orderSubmittedRef.current) router.replace('/')
@@ -333,7 +345,7 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
                   <button
                     type="button"
                     disabled={codBlockedByAmount || (fulfillment === 'delivery' && deliveryCalc != null && !deliveryCalc.cod_available)}
-                    onClick={() => { setPaymentMethod('cod'); setSelectedQrId(null) }}
+                    onClick={() => { setPaymentMethod('cod'); setSelectedQrId(null); setZoomedQr(false) }}
                     className={`p-3 rounded-xl border-2 text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
                       paymentMethod === 'cod' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white hover:border-blue-200'
                     }`}
@@ -350,12 +362,17 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
                       <button
                         key={qr.id}
                         type="button"
-                        onClick={() => { setPaymentMethod('qr'); setSelectedQrId(qr.id) }}
+                        onClick={() => { setPaymentMethod('qr'); setSelectedQrId(qr.id); setZoomedQr(false) }}
                         className={`p-3 rounded-xl border-2 text-left transition-all ${
                           isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white hover:border-blue-200'
                         }`}
                       >
-                        <span className="text-xl">📷</span>
+                        {qr.logo_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={qr.logo_url} alt="" className="w-6 h-6 object-contain rounded-full bg-white" />
+                        ) : (
+                          <span className="text-xl">📷</span>
+                        )}
                         <p className={`text-xs font-semibold mt-1 ${isSelected ? 'text-blue-700' : 'text-slate-600'}`}>
                           {qr.label}
                         </p>
@@ -365,7 +382,7 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
 
                   <button
                     type="button"
-                    onClick={() => { setPaymentMethod('bank_transfer'); setSelectedQrId(null) }}
+                    onClick={() => { setPaymentMethod('bank_transfer'); setSelectedQrId(null); setZoomedQr(false) }}
                     className={`p-3 rounded-xl border-2 text-left transition-all ${
                       paymentMethod === 'bank_transfer' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white hover:border-blue-200'
                     }`}
@@ -379,9 +396,18 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
 
                 {paymentMethod === 'qr' && selectedQr && (
                   <div className="flex flex-col items-center gap-2 py-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={selectedQr.image_url} alt={selectedQr.label} className="w-48 h-48 object-contain rounded-xl border border-slate-200 bg-white" />
-                    <p className="text-xs text-slate-500">Scan to pay via {selectedQr.label}</p>
+                    <button
+                      type="button"
+                      onClick={() => setZoomedQr(true)}
+                      className="relative w-64 h-64 max-w-full rounded-xl border border-slate-200 bg-white overflow-hidden cursor-zoom-in group"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={selectedQr.image_url} alt={selectedQr.label} className="w-full h-full object-contain" />
+                      <span className="absolute bottom-1.5 right-1.5 bg-slate-900/70 text-white rounded-full p-1.5 group-hover:bg-slate-900/90 transition-colors">
+                        <ZoomIn className="w-3.5 h-3.5" />
+                      </span>
+                    </button>
+                    <p className="text-xs text-slate-500">Scan to pay via {selectedQr.label} · Tap to zoom</p>
                   </div>
                 )}
                 {paymentMethod === 'bank_transfer' && (
@@ -551,6 +577,32 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
           {submitting ? 'Placing Order...' : `Place Order · ${formatPrice(total)}`}
         </button>
       </div>
+
+      {/* Fullscreen QR zoom */}
+      {zoomedQr && selectedQr && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-6"
+          onClick={() => setZoomedQr(false)}
+        >
+          <button
+            type="button"
+            onClick={() => setZoomedQr(false)}
+            className="absolute top-4 right-4 text-white/80 hover:text-white p-2"
+            aria-label="Close"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <div className="flex flex-col items-center gap-3" onClick={e => e.stopPropagation()}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={selectedQr.image_url}
+              alt={selectedQr.label}
+              className="w-[min(85vw,420px)] aspect-square object-contain rounded-xl bg-white"
+            />
+            <p className="text-sm text-white/80">Scan to pay via {selectedQr.label}</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

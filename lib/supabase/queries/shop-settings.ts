@@ -44,7 +44,7 @@ export async function getPublicShopSettings(): Promise<PublicShopSettings | null
 export async function getShopQrCodes(): Promise<ShopQrCode[]> {
   const { data, error } = await supabase
     .from('shop_qr_codes')
-    .select('id, label, image_url, sort_order')
+    .select('id, label, image_url, logo_url, sort_order')
     .eq('is_active', true)
     .order('sort_order')
 
