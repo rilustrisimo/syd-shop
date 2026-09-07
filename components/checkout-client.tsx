@@ -228,12 +228,17 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
         </div>
       </header>
 
-      <form onSubmit={handleSubmit} className="max-w-5xl mx-auto px-4 lg:px-6 py-6 pb-32 lg:pb-8">
+      <form
+        onSubmit={handleSubmit}
+        onFocus={() => setError(null)}
+        onClickCapture={() => setError(null)}
+        className="max-w-5xl mx-auto px-4 lg:px-6 py-6 pb-32 lg:pb-8"
+      >
         <div className="flex items-start gap-2.5 bg-green-50 border border-green-200 rounded-xl px-4 py-3 mb-4">
           <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
           <p className="text-sm text-green-800 leading-relaxed">
-            Just fill in the details below. Nothing is charged automatically — our staff will
-            <strong> call you to confirm</strong> before we prepare anything.
+            Just fill in the details below. Our staff will
+            <strong> call you to confirm your order</strong>, and you can still make changes before we prepare anything.
           </p>
         </div>
         <div className="lg:grid lg:grid-cols-5 lg:gap-8">
@@ -546,12 +551,6 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
                 </p>
               </div>
 
-              {error && (
-                <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700">
-                  {error}
-                </div>
-              )}
-
               <button type="submit" disabled={submitting}
                 className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl text-sm transition-colors shadow-md">
                 {submitting ? 'Placing Order...' : `Place Order · ${formatPrice(total)}`}
@@ -590,10 +589,6 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
             Our staff will contact you at <strong>{phone || 'your number'}</strong> to confirm your order.
             {settings.store_hours && <span className="block mt-0.5 text-blue-600">Hours: {settings.store_hours}</span>}
           </div>
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700">{error}</div>
-          )}
         </div>
       </form>
 
@@ -638,6 +633,27 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
             >
               <Download className="w-4 h-4" />
               Download QR
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Floating validation prompt — sits above the mobile submit bar,
+          dismisses itself as soon as the customer starts fixing the
+          form (focusing or clicking anything in it), or can be closed
+          manually. */}
+      {error && (
+        <div className="fixed inset-x-4 bottom-24 lg:bottom-6 lg:left-auto lg:right-6 lg:inset-x-auto lg:w-96 z-50">
+          <div className="flex items-start gap-3 bg-red-600 text-white rounded-xl shadow-lg p-4">
+            <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <p className="text-sm flex-1 leading-relaxed">{error}</p>
+            <button
+              type="button"
+              onClick={() => setError(null)}
+              className="flex-shrink-0 text-white/80 hover:text-white"
+              aria-label="Dismiss"
+            >
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
