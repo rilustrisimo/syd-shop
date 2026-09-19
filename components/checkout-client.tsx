@@ -220,12 +220,12 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
                       <span className="text-xs font-medium text-slate-600">{qr.label}</span>
                     </div>
                   ))}
-                  {bankAccounts.map(account => (
-                    <div key={account.id} className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full border border-slate-200 bg-white">
+                  {bankAccounts.length > 0 && (
+                    <div className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full border border-slate-200 bg-white">
                       <span className="text-sm">🏦</span>
-                      <span className="text-xs font-medium text-slate-600">{account.bank_name}</span>
+                      <span className="text-xs font-medium text-slate-600">Bank Transfer</span>
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             </SectionCard>
