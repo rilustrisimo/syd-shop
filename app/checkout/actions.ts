@@ -2,10 +2,8 @@
 
 import { createServerClient } from '@/lib/supabase/server'
 import { getShopSettings } from '@/lib/supabase/queries/shop-settings'
-import { calcFeeFromDistance, COD_MAX_SUBTOTAL } from '@/lib/haversine'
-import { getRoadDistance } from '@/lib/routing'
 import { Resend } from 'resend'
-import type { CartItem, FulfillmentType, PaymentMethod } from '@/lib/types'
+import type { CartItem, FulfillmentType } from '@/lib/types'
 
 function normalizePhone(raw: string): string {
   const digits = raw.replace(/\D/g, '')
@@ -22,11 +20,6 @@ export interface CheckoutPayload {
   barangay: string
   municipality: string
   province: string
-  pinLat: number | null
-  pinLng: number | null
-  paymentMethod: PaymentMethod
-  qrLabel: string | null
-  referenceNo: string
   notes: string
   items: CartItem[]
 }
@@ -36,31 +29,17 @@ export interface CheckoutResult {
   error?: string
 }
 
-export async function submitOrder(
-  payload: CheckoutPayload,
-  proofFile: FormData | null
-): Promise<CheckoutResult> {
-  const {
-    name, phone, fulfillment, street, barangay, municipality, province,
-    pinLat, pinLng, paymentMethod, qrLabel, referenceNo, notes, items,
-  } = payload
+export async function submitOrder(payload: CheckoutPayload): Promise<CheckoutResult> {
+  const { name, phone, fulfillment, street, barangay, municipality, province, notes, items } = payload
 
   if (!name.trim() || !phone.trim()) return { error: 'Name and phone are required.' }
   if (items.length === 0) return { error: 'Your cart is empty.' }
   if (fulfillment === 'delivery' && (!barangay.trim() || !municipality.trim())) {
     return { error: 'Delivery address is required.' }
   }
-  if (fulfillment === 'delivery' && (pinLat == null || pinLng == null)) {
-    return { error: 'Please pin your delivery location on the map.' }
-  }
 
   if (items.some(i => !i.quantity || i.quantity <= 0)) {
     return { error: 'Invalid item quantity in your cart. Please review your cart and try again.' }
-  }
-
-  const needsReference = paymentMethod !== 'cod'
-  if (needsReference && !referenceNo.trim()) {
-    return { error: 'Please provide a payment reference number so staff can verify your payment.' }
   }
 
   const settings = await getShopSettings()
@@ -110,29 +89,12 @@ export async function submitOrder(
 
   const orderItems = validatedItems as { product_id: string; product_code: string; product_name: string; unit_label: string; unit_price: number; quantity: number }[]
 
-  // Authoritative delivery fee
-  let distance_km = 0
-  let delivery_fee = 0
-  let cod_available = true
-
-  if (fulfillment === 'delivery' && pinLat != null && pinLng != null) {
-    const road = await getRoadDistance(settings.store_latitude, settings.store_longitude, pinLat, pinLng)
-    const calc = calcFeeFromDistance(road.distance_km, settings, road.road_based)
-    distance_km = calc.distance_km
-    delivery_fee = calc.delivery_fee
-    cod_available = calc.cod_available
-  }
-
-  if (fulfillment === 'delivery' && paymentMethod === 'cod' && !cod_available) {
-    return { error: 'COD is not available for your distance. Please select another payment method.' }
-  }
-
+  // Delivery fee, discount, and payment method are all deliberately left
+  // unset here — staff finalize the delivery fee/discount in syd-pos after
+  // reviewing the order, then send a payment link (Online Orders > Copy
+  // Payment Link) where the customer picks how they'll pay.
   const subtotal = orderItems.reduce((s, i) => s + i.unit_price * i.quantity, 0)
-  const total_amount = subtotal + delivery_fee
-
-  if (paymentMethod === 'cod' && subtotal >= COD_MAX_SUBTOTAL) {
-    return { error: `COD is not available for orders ₱${COD_MAX_SUBTOTAL.toLocaleString('en-PH')} and above. Please select another payment method.` }
-  }
+  const total_amount = subtotal
 
   // Customer match / create — matched by phone number, tolerant of whatever
   // format the number was originally entered in (spaces, dashes, with or
@@ -192,15 +154,15 @@ export async function submitOrder(
       barangay: barangay || null,
       municipality: municipality || null,
       province: province || null,
-      latitude: pinLat,
-      longitude: pinLng,
-      distance_km: distance_km || null,
-      payment_method: paymentMethod,
-      payment_qr_label: paymentMethod === 'qr' ? qrLabel : null,
-      payment_status: paymentMethod === 'cod' ? 'unpaid' : 'submitted',
-      payment_reference_no: referenceNo || null,
+      latitude: null,
+      longitude: null,
+      distance_km: null,
+      payment_method: null,
+      payment_qr_label: null,
+      payment_status: 'unpaid',
+      payment_reference_no: null,
       subtotal,
-      delivery_fee,
+      delivery_fee: 0,
       total_amount,
       notes: notes || null,
       customer_id: customerId,
@@ -228,29 +190,6 @@ export async function submitOrder(
   const { error: linesErr } = await supabase.from('online_order_lines').insert(lines)
   if (linesErr) console.error('Order lines insert error:', linesErr.message)
 
-  // Proof upload (if provided)
-  if (proofFile) {
-    const file = proofFile.get('proof') as File | null
-    if (file && file.size > 0) {
-      const ext = file.name.split('.').pop() ?? 'jpg'
-      const path = `${order.id}.${ext}`
-      const { error: uploadErr } = await supabase.storage
-        .from('payment-proofs')
-        .upload(path, file, { contentType: file.type, upsert: true })
-
-      if (!uploadErr) {
-        // payment-proofs is a private bucket — store the object path, not a public
-        // URL. The POS resolves it to a short-lived signed URL when staff view it.
-        await supabase
-          .from('online_orders')
-          .update({ payment_proof_url: path })
-          .eq('id', order.id)
-      } else {
-        console.error('Proof upload error:', uploadErr.message)
-      }
-    }
-  }
-
   // Resend email notification
   if (settings.staff_notification_emails && process.env.RESEND_API_KEY) {
     const emails = settings.staff_notification_emails.split(',').map(e => e.trim()).filter(Boolean)
@@ -269,14 +208,12 @@ export async function submitOrder(
             <h2>New Online Order Received</h2>
             <p><strong>Order:</strong> ${order.order_number}</p>
             <p><strong>Customer:</strong> ${name.trim()} · ${normalizedPhone}</p>
-            <p><strong>Fulfillment:</strong> ${fulfillment === 'delivery' ? `Delivery (${distance_km} km · ₱${delivery_fee} delivery fee)` : 'Pickup'}</p>
-            <p><strong>Payment:</strong> ${paymentMethod.replace('_', ' ').toUpperCase()}${paymentMethod === 'qr' && qrLabel ? ` (${qrLabel})` : ''}${referenceNo ? ` — Ref: ${referenceNo}` : ''}</p>
+            <p><strong>Fulfillment:</strong> ${fulfillment === 'delivery' ? 'Delivery (fee not yet set)' : 'Pickup'}</p>
+            <p><strong>Payment:</strong> not yet selected — send a payment link once the order is finalized</p>
             <hr/>
             <p><strong>Items:</strong><br>${itemsList}</p>
             <hr/>
             <p><strong>Subtotal:</strong> ₱${subtotal.toLocaleString('en-PH')}</p>
-            <p><strong>Delivery fee:</strong> ₱${delivery_fee.toLocaleString('en-PH')}</p>
-            <p><strong>Total:</strong> ₱${total_amount.toLocaleString('en-PH')}</p>
             ${notes ? `<p><strong>Notes:</strong> ${notes}</p>` : ''}
             <hr/>
             <p><a href="${process.env.NEXT_PUBLIC_POS_URL ?? 'https://app.sydconstruct.com'}/orders/online/${order.id}">View Order in POS →</a></p>

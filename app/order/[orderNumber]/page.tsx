@@ -175,22 +175,25 @@ export default async function OrderConfirmationPage({ params }: Props) {
               </div>
               {order.fulfillment === 'delivery' && (
                 <div className="flex justify-between text-sm text-slate-500">
-                  <span>Delivery fee{order.distance_km ? ` (${order.distance_km} km)` : ''}</span>
-                  <span>{formatPrice(order.delivery_fee)}</span>
+                  <span>Delivery fee</span>
+                  <span className="italic text-slate-400">To be confirmed</span>
                 </div>
               )}
               <div className="flex justify-between font-bold text-slate-900 pt-1.5 border-t border-slate-100">
-                <span>Total</span>
+                <span>{order.fulfillment === 'delivery' ? 'Subtotal' : 'Total'}</span>
                 <span className="text-[#ffc107] text-base">{formatPrice(order.total_amount)}</span>
               </div>
             </div>
 
             <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-400 space-y-1">
               <p>
-                Payment: <span className="capitalize text-slate-600">{order.payment_method.replace('_', ' ')}</span>
-                {order.payment_method === 'qr' && order.payment_qr_label && (
-                  <span className="text-slate-600"> ({order.payment_qr_label})</span>
-                )}
+                {order.payment_method
+                  ? <>Payment: <span className="capitalize text-slate-600">{order.payment_method.replace('_', ' ')}</span>
+                      {order.payment_method === 'qr' && order.payment_qr_label && (
+                        <span className="text-slate-600"> ({order.payment_qr_label})</span>
+                      )}
+                    </>
+                  : 'Payment: not selected yet — staff will send a payment link once your order is finalized.'}
               </p>
               {order.payment_reference_no && (
                 <p>Reference: <span className="text-slate-600">{order.payment_reference_no}</span></p>

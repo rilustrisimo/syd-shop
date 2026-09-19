@@ -1,23 +1,15 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { MapPin, AlertTriangle, CheckCircle, Upload, X, ArrowLeft, Package, ZoomIn, Download } from 'lucide-react'
+import { AlertTriangle, CheckCircle, X, ArrowLeft, Package, ZoomIn, Truck } from 'lucide-react'
 import { useCart } from '@/lib/cart'
-import { calcFeeFromDistance, COD_MAX_SUBTOTAL } from '@/lib/haversine'
-import { getRoadDistance } from '@/lib/routing'
 import { formatPrice } from '@/components/currency'
 import { optimizedImageUrl } from '@/lib/image'
 import { submitOrder } from '@/app/checkout/actions'
-import type { ShopSettings, FulfillmentType, PaymentMethod, DeliveryCalc, ShopQrCode, ShopBankAccount } from '@/lib/types'
-
-const DeliveryMap = dynamic(() => import('@/components/delivery-map').then(m => ({ default: m.DeliveryMap })), {
-  ssr: false,
-  loading: () => <div className="w-full h-[55vh] min-h-[360px] sm:h-[480px] rounded-xl bg-slate-100 animate-pulse border border-slate-200" />,
-})
+import type { ShopSettings, FulfillmentType, ShopQrCode, ShopBankAccount } from '@/lib/types'
 
 interface CheckoutClientProps {
   settings: ShopSettings
@@ -60,22 +52,11 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
   const [barangay, setBarangay] = useState('')
   const [municipality, setMunicipality] = useState('')
   const [province, setProvince] = useState('')
-  const [pinLat, setPinLat] = useState<number | null>(null)
-  const [pinLng, setPinLng] = useState<number | null>(null)
-  const [deliveryCalc, setDeliveryCalc] = useState<DeliveryCalc | null>(null)
-  const [routeCoords, setRouteCoords] = useState<[number, number][] | null>(null)
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod')
-  const [selectedQrId, setSelectedQrId] = useState<string | null>(null)
-  const [zoomedQr, setZoomedQr] = useState(false)
-  const [referenceNo, setReferenceNo] = useState('')
-  const [proofFile, setProofFile] = useState<File | null>(null)
+  const [zoomedQr, setZoomedQr] = useState<ShopQrCode | null>(null)
   const [notes, setNotes] = useState('')
-  const [deliveryLoading, setDeliveryLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const proofInputRef = useRef<HTMLInputElement>(null)
-  const abortRef = useRef<AbortController | null>(null)
   // Guards the empty-cart redirect below from firing when clearCart() runs
   // as part of a successful submission (see handleSubmit) - without this,
   // clearing the cart before navigating to the order confirmation page
@@ -83,47 +64,9 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
   const orderSubmittedRef = useRef(false)
 
   useEffect(() => {
-    if (fulfillment !== 'delivery' || pinLat == null || pinLng == null) {
-      setDeliveryCalc(null)
-      setRouteCoords(null)
-      setDeliveryLoading(false)
-      abortRef.current?.abort()
-      return
-    }
-
-    // Cancel any in-flight OSRM request from a previous pin position
-    abortRef.current?.abort()
-    const ctrl = new AbortController()
-    abortRef.current = ctrl
-
-    setDeliveryLoading(true)
-
-    getRoadDistance(settings.store_latitude, settings.store_longitude, pinLat, pinLng, ctrl.signal)
-      .then(({ distance_km, road_based, routeCoords: coords }) => {
-        const calc = calcFeeFromDistance(distance_km, settings, road_based)
-        setDeliveryCalc(calc)
-        setRouteCoords(coords ?? null)
-        setDeliveryLoading(false)
-        if (!calc.cod_available && paymentMethod === 'cod') {
-          setPaymentMethod('bank_transfer')
-          setSelectedQrId(null)
-        }
-      })
-      .catch(err => {
-        if (err?.name !== 'AbortError') setDeliveryLoading(false)
-      })
-
-    return () => ctrl.abort()
-  }, [pinLat, pinLng, fulfillment, settings])
-
-  useEffect(() => {
-    if (fulfillment === 'pickup') setPaymentMethod('cod')
-  }, [fulfillment])
-
-  useEffect(() => {
     if (!zoomedQr) return
     document.body.style.overflow = 'hidden'
-    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') setZoomedQr(false) }
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') setZoomedQr(null) }
     window.addEventListener('keydown', onKeyDown)
     return () => {
       document.body.style.overflow = ''
@@ -135,19 +78,7 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
     if (isHydrated && items.length === 0 && !orderSubmittedRef.current) router.replace('/')
   }, [isHydrated, items.length, router])
 
-  const codBlockedByAmount = subtotal >= COD_MAX_SUBTOTAL
-
-  useEffect(() => {
-    if (codBlockedByAmount && paymentMethod === 'cod') {
-      setPaymentMethod('bank_transfer')
-      setSelectedQrId(null)
-    }
-  }, [codBlockedByAmount, paymentMethod])
-
-  const delivery_fee = fulfillment === 'delivery' ? (deliveryCalc?.delivery_fee ?? 0) : 0
-  const total = subtotal + delivery_fee
-  const needsProof = paymentMethod === 'bank_transfer' || paymentMethod === 'qr'
-  const selectedQr = paymentMethod === 'qr' ? qrCodes.find(qr => qr.id === selectedQrId) ?? null : null
+  const total = subtotal
 
   // Don't render until localStorage is read — prevents flash redirect on mount
   if (!isHydrated || items.length === 0) return null
@@ -155,29 +86,9 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-
-    if (needsProof && !referenceNo.trim()) {
-      setError('Please enter your payment reference number so staff can verify your payment.')
-      return
-    }
-
-    if (paymentMethod === 'qr' && !selectedQr) {
-      setError('Please select which QR code you paid with.')
-      return
-    }
-
     setSubmitting(true)
 
-    let proofFormData: FormData | null = null
-    if (proofFile) {
-      proofFormData = new FormData()
-      proofFormData.append('proof', proofFile)
-    }
-
-    const result = await submitOrder(
-      { name, phone, fulfillment, street, barangay, municipality, province, pinLat, pinLng, paymentMethod, qrLabel: selectedQr?.label ?? null, referenceNo, notes, items },
-      proofFormData
-    )
+    const result = await submitOrder({ name, phone, fulfillment, street, barangay, municipality, province, notes, items })
 
     if (result.error) {
       setError(result.error)
@@ -188,29 +99,6 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
     orderSubmittedRef.current = true
     clearCart()
     router.push(`/order/${result.orderNumber}`)
-  }
-
-  // Fetches the QR as a blob so the save works cross-origin (Supabase
-  // Storage is a different origin than the shop, and the `download`
-  // attribute alone is unreliable across origins). Falls back to
-  // opening the image in a new tab so the customer can still long-press
-  // to save it manually if the fetch is ever blocked.
-  async function handleDownloadQr(qr: ShopQrCode) {
-    try {
-      const res = await fetch(qr.image_url)
-      const blob = await res.blob()
-      const ext = blob.type.split('/')[1] || 'png'
-      const objectUrl = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = objectUrl
-      a.download = `${qr.label.toLowerCase().replace(/\s+/g, '-')}.${ext}`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(objectUrl)
-    } catch {
-      window.open(qr.image_url, '_blank')
-    }
   }
 
   return (
@@ -312,141 +200,49 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
               </SectionCard>
             )}
 
-            {/* Map pin */}
+            {/* Delivery fee note */}
             {fulfillment === 'delivery' && (
-              <SectionCard title="Pin Your Exact Delivery Location">
-                <div className="space-y-3">
-                  <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                    <p className="text-xs text-amber-700 leading-relaxed">
-                      <strong>Important:</strong> We only deliver to your pinned location. Pin accurately so your delivery fee is calculated correctly.
-                    </p>
-                  </div>
-                  <DeliveryMap
-                    storeLat={settings.store_latitude}
-                    storeLng={settings.store_longitude}
-                    onPin={(lat, lng) => { setPinLat(lat); setPinLng(lng) }}
-                    pinLat={pinLat}
-                    pinLng={pinLng}
-                    routeCoords={routeCoords}
-                  />
-                  {deliveryLoading ? (
-                    <div className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm text-slate-500 bg-slate-50 border border-slate-200 animate-pulse">
-                      <MapPin className="w-4 h-4 flex-shrink-0" />
-                      <span>Calculating road distance...</span>
-                    </div>
-                  ) : deliveryCalc ? (
-                    <div className={`rounded-lg px-4 py-3 text-sm font-medium ${
-                      deliveryCalc.cod_available
-                        ? 'bg-green-50 text-green-800 border border-green-200'
-                        : 'bg-amber-50 text-amber-800 border border-amber-200'
-                    }`}>
-                      <div className="flex items-center gap-2">
-                        <MapPin className="w-4 h-4 flex-shrink-0" />
-                        <span>
-                          <strong>{deliveryCalc.distance_km} km</strong> from store
-                          {' · '}
-                          Delivery fee: <strong>{formatPrice(deliveryCalc.delivery_fee)}</strong>
-                          {deliveryCalc.cod_available
-                            ? ' · ✅ Cash on Delivery available'
-                            : ' · That\'s a bit far for Cash on Delivery — please pick GCash, bank transfer, or QR below'}
-                        </span>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-slate-400 text-center py-1">Tap on the map to pin your delivery location</p>
-                  )}
+              <SectionCard title="Delivery Fee">
+                <div className="flex items-start gap-2.5 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5">
+                  <Truck className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-blue-800 leading-relaxed">
+                    Delivery fee will be calculated and confirmed by our staff when they reach out to finalize your order.
+                  </p>
                 </div>
               </SectionCard>
             )}
 
-            {/* Payment */}
-            <SectionCard title="Payment Method">
+            {/* Payment — informational only, no selection needed here */}
+            <SectionCard title="Accepted Payment Methods">
               <div className="space-y-4">
-                {codBlockedByAmount && (
-                  <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-xs text-amber-800">
-                    <span className="flex-shrink-0 mt-0.5">💵</span>
-                    <span>Cash on Delivery is not available for orders <strong>₱5,000 and above</strong>. Please select another payment method.</span>
-                  </div>
-                )}
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    disabled={codBlockedByAmount || (fulfillment === 'delivery' && deliveryCalc != null && !deliveryCalc.cod_available)}
-                    onClick={() => { setPaymentMethod('cod'); setSelectedQrId(null); setZoomedQr(false) }}
-                    className={`p-3 rounded-xl border-2 text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                      paymentMethod === 'cod' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white hover:border-blue-200'
-                    }`}
-                  >
-                    <span className="text-xl">💵</span>
-                    <p className={`text-xs font-semibold mt-1 ${paymentMethod === 'cod' ? 'text-blue-700' : 'text-slate-600'}`}>
-                      Cash on Delivery
-                    </p>
-                  </button>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  You don&apos;t need to pay yet — just note which option works for you. Staff will send a secure
+                  payment link once your order is finalized, where you can pick a method and confirm payment.
+                </p>
 
-                  {qrCodes.map(qr => {
-                    const isSelected = paymentMethod === 'qr' && selectedQrId === qr.id
-                    return (
+                {qrCodes.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {qrCodes.map(qr => (
                       <button
                         key={qr.id}
                         type="button"
-                        onClick={() => { setPaymentMethod('qr'); setSelectedQrId(qr.id); setZoomedQr(false) }}
-                        className={`p-3 rounded-xl border-2 text-left transition-all ${
-                          isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white hover:border-blue-200'
-                        }`}
+                        onClick={() => setZoomedQr(qr)}
+                        className="flex flex-col items-center gap-2 p-3 rounded-xl border border-slate-200 bg-white hover:border-blue-200 transition-colors cursor-zoom-in"
                       >
-                        {qr.logo_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={qr.logo_url} alt="" className="h-8 max-w-[76px] object-contain object-left" />
-                        ) : (
-                          <span className="text-xl">📷</span>
-                        )}
-                        <p className={`text-xs font-semibold mt-1 ${isSelected ? 'text-blue-700' : 'text-slate-600'}`}>
-                          {qr.label}
-                        </p>
+                        <div className="relative w-20 h-20 rounded-lg overflow-hidden bg-slate-50 border border-slate-100">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={qr.image_url} alt={qr.label} className="w-full h-full object-contain" />
+                          <span className="absolute bottom-1 right-1 bg-slate-900/70 text-white rounded-full p-1">
+                            <ZoomIn className="w-3 h-3" />
+                          </span>
+                        </div>
+                        <p className="text-xs font-semibold text-slate-600 text-center">{qr.label}</p>
                       </button>
-                    )
-                  })}
-
-                  <button
-                    type="button"
-                    onClick={() => { setPaymentMethod('bank_transfer'); setSelectedQrId(null); setZoomedQr(false) }}
-                    className={`p-3 rounded-xl border-2 text-left transition-all ${
-                      paymentMethod === 'bank_transfer' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white hover:border-blue-200'
-                    }`}
-                  >
-                    <span className="text-xl">🏦</span>
-                    <p className={`text-xs font-semibold mt-1 ${paymentMethod === 'bank_transfer' ? 'text-blue-700' : 'text-slate-600'}`}>
-                      Bank Transfer
-                    </p>
-                  </button>
-                </div>
-
-                {paymentMethod === 'qr' && selectedQr && (
-                  <div className="flex flex-col items-center gap-2 py-2">
-                    <button
-                      type="button"
-                      onClick={() => setZoomedQr(true)}
-                      className="relative w-64 h-64 max-w-full rounded-xl border border-slate-200 bg-white overflow-hidden cursor-zoom-in group"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={selectedQr.image_url} alt={selectedQr.label} className="w-full h-full object-contain" />
-                      <span className="absolute bottom-1.5 right-1.5 bg-slate-900/70 text-white rounded-full p-1.5 group-hover:bg-slate-900/90 transition-colors">
-                        <ZoomIn className="w-3.5 h-3.5" />
-                      </span>
-                    </button>
-                    <p className="text-xs text-slate-500">Scan to pay via {selectedQr.label} · Tap to zoom</p>
-                    <button
-                      type="button"
-                      onClick={() => handleDownloadQr(selectedQr)}
-                      className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      Download QR to upload in your banking app
-                    </button>
+                    ))}
                   </div>
                 )}
-                {paymentMethod === 'bank_transfer' && (
+
+                {bankAccounts.length > 0 && (
                   <div className="space-y-2">
                     {bankAccounts.map(account => (
                       <div key={account.id} className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
@@ -455,34 +251,6 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
                         <p className="text-blue-700">{account.account_number}</p>
                       </div>
                     ))}
-                  </div>
-                )}
-
-                {needsProof && (
-                  <div className="space-y-3 pt-1 border-t border-slate-100">
-                    <Field label="Reference / Confirmation Number" required>
-                      <input required value={referenceNo} onChange={e => setReferenceNo(e.target.value)}
-                        placeholder="e.g. GCash ref 1234567890" className={inputClass} />
-                    </Field>
-                    <Field label="Upload Payment Screenshot (Optional)">
-                      <input ref={proofInputRef} type="file" accept="image/*" className="hidden"
-                        onChange={e => setProofFile(e.target.files?.[0] ?? null)} />
-                      {proofFile ? (
-                        <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2.5">
-                          <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />
-                          <span className="text-xs text-green-700 flex-1 truncate font-medium">{proofFile.name}</span>
-                          <button type="button" onClick={() => setProofFile(null)} className="text-slate-400 hover:text-red-400">
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ) : (
-                        <button type="button" onClick={() => proofInputRef.current?.click()}
-                          className="w-full border-2 border-dashed border-slate-300 hover:border-blue-400 rounded-lg py-4 flex flex-col items-center gap-1.5 text-slate-400 hover:text-blue-500 transition-colors">
-                          <Upload className="w-5 h-5" />
-                          <span className="text-xs font-medium">Tap to upload proof of payment</span>
-                        </button>
-                      )}
-                    </Field>
                   </div>
                 )}
               </div>
@@ -530,12 +298,14 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
                       <span>Subtotal</span>
                       <span>{formatPrice(subtotal)}</span>
                     </div>
-                    <div className="flex justify-between text-sm text-slate-600">
-                      <span>Delivery fee</span>
-                      <span>{fulfillment === 'pickup' ? 'Free' : deliveryCalc ? formatPrice(delivery_fee) : 'Pin location first'}</span>
-                    </div>
+                    {fulfillment === 'delivery' && (
+                      <div className="flex justify-between text-sm text-slate-600">
+                        <span>Delivery fee</span>
+                        <span className="italic text-slate-400">To be confirmed</span>
+                      </div>
+                    )}
                     <div className="flex justify-between font-bold text-slate-900 pt-1 border-t border-slate-100">
-                      <span>Total</span>
+                      <span>{fulfillment === 'delivery' ? 'Subtotal' : 'Total'}</span>
                       <span className="text-[#ffc107] text-base">{formatPrice(total)}</span>
                     </div>
                   </div>
@@ -573,12 +343,14 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
                 </div>
               ))}
               <div className="border-t border-slate-100 pt-2 space-y-1">
-                <div className="flex justify-between text-sm text-slate-600">
-                  <span>Delivery fee</span>
-                  <span>{fulfillment === 'pickup' ? 'Free' : deliveryCalc ? formatPrice(delivery_fee) : 'Pin location first'}</span>
-                </div>
+                {fulfillment === 'delivery' && (
+                  <div className="flex justify-between text-sm text-slate-600">
+                    <span>Delivery fee</span>
+                    <span className="italic text-slate-400">To be confirmed</span>
+                  </div>
+                )}
                 <div className="flex justify-between font-bold text-slate-900">
-                  <span>Total</span>
+                  <span>{fulfillment === 'delivery' ? 'Subtotal' : 'Total'}</span>
                   <span className="text-[#ffc107]">{formatPrice(total)}</span>
                 </div>
               </div>
@@ -605,14 +377,14 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
       </div>
 
       {/* Fullscreen QR zoom */}
-      {zoomedQr && selectedQr && (
+      {zoomedQr && (
         <div
           className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-6"
-          onClick={() => setZoomedQr(false)}
+          onClick={() => setZoomedQr(null)}
         >
           <button
             type="button"
-            onClick={() => setZoomedQr(false)}
+            onClick={() => setZoomedQr(null)}
             className="absolute top-4 right-4 text-white/80 hover:text-white p-2"
             aria-label="Close"
           >
@@ -621,19 +393,11 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
           <div className="flex flex-col items-center gap-3" onClick={e => e.stopPropagation()}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={selectedQr.image_url}
-              alt={selectedQr.label}
+              src={zoomedQr.image_url}
+              alt={zoomedQr.label}
               className="w-[min(85vw,420px)] aspect-square object-contain rounded-xl bg-white"
             />
-            <p className="text-sm text-white/80">Scan to pay via {selectedQr.label}</p>
-            <button
-              type="button"
-              onClick={() => handleDownloadQr(selectedQr)}
-              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              Download QR
-            </button>
+            <p className="text-sm text-white/80">{zoomedQr.label}</p>
           </div>
         </div>
       )}
