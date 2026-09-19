@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, CheckCircle, X, ArrowLeft, Package, ZoomIn, Truck } from 'lucide-react'
+import { AlertTriangle, CheckCircle, X, ArrowLeft, Package, Truck } from 'lucide-react'
 import { useCart } from '@/lib/cart'
 import { formatPrice } from '@/components/currency'
 import { optimizedImageUrl } from '@/lib/image'
@@ -52,7 +52,6 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
   const [barangay, setBarangay] = useState('')
   const [municipality, setMunicipality] = useState('')
   const [province, setProvince] = useState('')
-  const [zoomedQr, setZoomedQr] = useState<ShopQrCode | null>(null)
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -62,17 +61,6 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
   // clearing the cart before navigating to the order confirmation page
   // races with that redirect, which can send the user home instead.
   const orderSubmittedRef = useRef(false)
-
-  useEffect(() => {
-    if (!zoomedQr) return
-    document.body.style.overflow = 'hidden'
-    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') setZoomedQr(null) }
-    window.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.body.style.overflow = ''
-      window.removeEventListener('keydown', onKeyDown)
-    }
-  }, [zoomedQr])
 
   useEffect(() => {
     if (isHydrated && items.length === 0 && !orderSubmittedRef.current) router.replace('/')
@@ -220,39 +208,25 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
                   payment link once your order is finalized, where you can pick a method and confirm payment.
                 </p>
 
-                {qrCodes.length > 0 && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {qrCodes.map(qr => (
-                      <button
-                        key={qr.id}
-                        type="button"
-                        onClick={() => setZoomedQr(qr)}
-                        className="flex flex-col items-center gap-2 p-3 rounded-xl border border-slate-200 bg-white hover:border-blue-200 transition-colors cursor-zoom-in"
-                      >
-                        <div className="relative w-20 h-20 rounded-lg overflow-hidden bg-slate-50 border border-slate-100">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={qr.image_url} alt={qr.label} className="w-full h-full object-contain" />
-                          <span className="absolute bottom-1 right-1 bg-slate-900/70 text-white rounded-full p-1">
-                            <ZoomIn className="w-3 h-3" />
-                          </span>
-                        </div>
-                        <p className="text-xs font-semibold text-slate-600 text-center">{qr.label}</p>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {bankAccounts.length > 0 && (
-                  <div className="space-y-2">
-                    {bankAccounts.map(account => (
-                      <div key={account.id} className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
-                        <p className="font-semibold text-blue-900 text-xs uppercase tracking-wide mb-1">{account.bank_name}</p>
-                        <p className="text-blue-900 font-medium">{account.account_name}</p>
-                        <p className="text-blue-700">{account.account_number}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <div className="flex flex-wrap gap-2">
+                  {qrCodes.map(qr => (
+                    <div key={qr.id} className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full border border-slate-200 bg-white">
+                      {qr.logo_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={qr.logo_url} alt="" className="h-5 w-auto max-w-[60px] object-contain" />
+                      ) : (
+                        <span className="text-sm">📷</span>
+                      )}
+                      <span className="text-xs font-medium text-slate-600">{qr.label}</span>
+                    </div>
+                  ))}
+                  {bankAccounts.map(account => (
+                    <div key={account.id} className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full border border-slate-200 bg-white">
+                      <span className="text-sm">🏦</span>
+                      <span className="text-xs font-medium text-slate-600">{account.bank_name}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </SectionCard>
 
@@ -375,32 +349,6 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
           {submitting ? 'Placing Order...' : `Place Order · ${formatPrice(total)}`}
         </button>
       </div>
-
-      {/* Fullscreen QR zoom */}
-      {zoomedQr && (
-        <div
-          className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-6"
-          onClick={() => setZoomedQr(null)}
-        >
-          <button
-            type="button"
-            onClick={() => setZoomedQr(null)}
-            className="absolute top-4 right-4 text-white/80 hover:text-white p-2"
-            aria-label="Close"
-          >
-            <X className="w-6 h-6" />
-          </button>
-          <div className="flex flex-col items-center gap-3" onClick={e => e.stopPropagation()}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={zoomedQr.image_url}
-              alt={zoomedQr.label}
-              className="w-[min(85vw,420px)] aspect-square object-contain rounded-xl bg-white"
-            />
-            <p className="text-sm text-white/80">{zoomedQr.label}</p>
-          </div>
-        </div>
-      )}
 
       {/* Floating validation prompt — sits above the mobile submit bar,
           dismisses itself as soon as the customer starts fixing the
