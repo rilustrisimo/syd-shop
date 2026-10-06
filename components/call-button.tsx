@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation'
 import { Phone } from 'lucide-react'
 import { useCart } from '@/lib/cart'
+import { pushDataLayerEvent } from '@/lib/analytics'
 
 interface CallButtonProps {
   phone: string
@@ -41,6 +42,7 @@ export function CallButton({ phone }: CallButtonProps) {
   return (
     <a
       href={`tel:${phone}`}
+      onClick={() => pushDataLayerEvent('contact', { method: 'phone' })}
       className={`fixed ${hasBottomBar ? 'bottom-24' : 'bottom-6'} sm:bottom-6 left-6 z-40 flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white pl-4 pr-5 py-3.5 rounded-full shadow-xl font-bold transition-all hover:scale-105`}
     >
       <span className="relative flex h-3 w-3">

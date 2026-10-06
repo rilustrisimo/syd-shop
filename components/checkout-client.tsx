@@ -9,6 +9,7 @@ import { useCart } from '@/lib/cart'
 import { formatPrice } from '@/components/currency'
 import { optimizedImageUrl } from '@/lib/image'
 import { submitOrder } from '@/app/checkout/actions'
+import { pushDataLayerEvent } from '@/lib/analytics'
 import type { ShopSettings, FulfillmentType, ShopQrCode, ShopBankAccount } from '@/lib/types'
 
 interface CheckoutClientProps {
@@ -85,6 +86,19 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
     }
 
     orderSubmittedRef.current = true
+
+    // Primary conversion event — deliberately "lead", not "purchase": no
+    // payment has been confirmed at this point, only an order intent.
+    // Fired here (not server-side in submitOrder) because dataLayer needs
+    // the browser, and this is the one moment guaranteed to happen inside
+    // the same session as whatever ad/channel brought the customer here.
+    pushDataLayerEvent('generate_lead', {
+      currency: 'PHP',
+      value: subtotal,
+      transaction_id: result.orderNumber,
+      items: items.map(i => ({ item_id: i.product_id, item_name: i.product_name, price: i.unit_price, quantity: i.quantity })),
+    })
+
     clearCart()
     router.push(`/order/${result.orderNumber}`)
   }

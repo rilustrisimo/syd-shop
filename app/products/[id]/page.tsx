@@ -11,6 +11,7 @@ import { useCart } from '@/lib/cart'
 import { formatPrice } from '@/components/currency'
 import { QtyInput } from '@/components/qty-input'
 import { optimizedImageUrl } from '@/lib/image'
+import { pushDataLayerEvent } from '@/lib/analytics'
 import type { ShopProductDetail } from '@/lib/types'
 
 export default function ProductDetailPage() {
@@ -28,7 +29,14 @@ export default function ProductDetailPage() {
       const data = await getProductById(id, branchId)
       setProduct(data)
       setLoading(false)
-      if (data) document.title = `${data.name} · SYD Construction Supplies`
+      if (data) {
+        document.title = `${data.name} · SYD Construction Supplies`
+        pushDataLayerEvent('view_item', {
+          currency: 'PHP',
+          value: data.current_selling_price,
+          items: [{ item_id: data.id, item_name: data.name, price: data.current_selling_price }],
+        })
+      }
     }
     load()
   }, [id])

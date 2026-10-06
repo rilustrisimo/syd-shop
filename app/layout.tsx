@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { RouteProgress } from '@/components/route-progress'
 import { CallButton } from '@/components/call-button'
+import { GtmScript, GtmNoscript } from '@/components/analytics/gtm'
+import { PageViewTracker } from '@/components/analytics/page-view-tracker'
 import { getPublicShopSettings } from '@/lib/supabase/queries/shop-settings'
 import './globals.css'
 
@@ -26,7 +28,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="en" className="h-full">
+      <head>
+        <GtmScript />
+      </head>
       <body className="min-h-full bg-slate-50 text-slate-900 antialiased">
+        <GtmNoscript />
+        <PageViewTracker />
         <RouteProgress />
         {children}
         {settings?.store_phone && <CallButton phone={settings.store_phone} />}

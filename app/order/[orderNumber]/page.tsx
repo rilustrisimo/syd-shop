@@ -5,6 +5,7 @@ import { CheckCircle, Phone, Clock, Package, MapPin } from 'lucide-react'
 import { createServerClient } from '@/lib/supabase/server'
 import { getPublicShopSettings } from '@/lib/supabase/queries/shop-settings'
 import { formatPrice } from '@/components/currency'
+import { TrackedTelLink } from '@/components/analytics/tracked-tel-link'
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { orderNumber } = await params
@@ -207,7 +208,7 @@ export default async function OrderConfirmationPage({ params }: Props) {
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm">
             <p className="font-semibold text-blue-900">Need anything in the meantime? 😊</p>
             <p className="text-blue-800 mt-0.5">
-              We&apos;re happy to help — call or text us: <a href={`tel:${settings.store_phone}`} className="font-bold underline">{settings.store_phone}</a>
+              We&apos;re happy to help — call or text us: <TrackedTelLink phone={settings.store_phone} className="font-bold underline">{settings.store_phone}</TrackedTelLink>
             </p>
             {settings.store_address && (
               <p className="text-blue-600 text-xs mt-1">{settings.store_address}</p>

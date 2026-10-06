@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react'
 import { CheckCircle, Upload, X, ZoomIn, Download } from 'lucide-react'
 import { submitPayment } from '@/app/pay/[orderId]/actions'
+import { pushDataLayerEvent } from '@/lib/analytics'
 import type { PaymentMethod, ShopQrCode, ShopBankAccount } from '@/lib/types'
 
 interface PaymentMethodPickerProps {
@@ -90,6 +91,13 @@ export function PaymentMethodPicker({ orderId, qrCodes, bankAccounts }: PaymentM
       setSubmitting(false)
       return
     }
+
+    // Secondary event — not the primary conversion signal (see
+    // generate_lead in checkout-client.tsx), since this page is often
+    // reached via a link sent through another channel, possibly days
+    // later, breaking attribution back to the original ad session. Still
+    // useful for funnel visibility.
+    pushDataLayerEvent('submit_payment_info', { transaction_id: orderId, payment_method: paymentMethod })
 
     setSubmitted(true)
   }

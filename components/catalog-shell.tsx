@@ -10,6 +10,7 @@ import { slugify } from '@/lib/slug'
 import { CatalogContext } from '@/lib/catalog-context'
 import type { ShopCategory } from '@/lib/types'
 import { formatPrice } from '@/components/currency'
+import { pushDataLayerEvent } from '@/lib/analytics'
 
 interface CatalogShellProps {
   categories: ShopCategory[]
@@ -60,6 +61,23 @@ export function CatalogShell({ categories, branchId, storeName = 'SYD Constructi
   function clearSearch() {
     setSearch('')
   }
+
+  function trackCategorySelect(categoryName: string) {
+    pushDataLayerEvent('select_content', { content_type: 'category', item_name: categoryName })
+  }
+
+  // page_view already fires on every route change (including category
+  // navigation), so this debounced search event is the one bit of intent
+  // that wouldn't otherwise be visible — only fires once typing pauses,
+  // not on every keystroke, and only for non-trivial queries.
+  useEffect(() => {
+    const trimmed = deferredSearch.trim()
+    if (trimmed.length < 2) return
+    const timeout = setTimeout(() => {
+      pushDataLayerEvent('search', { search_term: trimmed })
+    }, 600)
+    return () => clearTimeout(timeout)
+  }, [deferredSearch])
 
   const contextValue = useMemo(
     () => ({
@@ -146,7 +164,7 @@ export function CatalogShell({ categories, branchId, storeName = 'SYD Constructi
               <nav className="p-2 overflow-y-auto">
                 <Link
                   href="/"
-                  onClick={clearSearch}
+                  onClick={() => { clearSearch(); trackCategorySelect('All Products') }}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left cursor-pointer ${
                     !effectiveActiveCategoryId
                       ? 'bg-blue-600 text-white'
@@ -160,7 +178,7 @@ export function CatalogShell({ categories, branchId, storeName = 'SYD Constructi
                   <Link
                     key={cat.id}
                     href={categoryHref(cat.id, categories)}
-                    onClick={clearSearch}
+                    onClick={() => { clearSearch(); trackCategorySelect(cat.name) }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left cursor-pointer ${
                       effectiveActiveCategoryId === cat.id
                         ? 'bg-blue-600 text-white'
@@ -196,7 +214,7 @@ export function CatalogShell({ categories, branchId, storeName = 'SYD Constructi
                 <nav className="p-3 space-y-1 pb-8">
                   <Link
                     href="/"
-                    onClick={() => { clearSearch(); closeMobileSidebar() }}
+                    onClick={() => { clearSearch(); closeMobileSidebar(); trackCategorySelect('All Products') }}
                     className={`w-full flex items-center justify-between px-4 py-4 rounded-xl text-base font-semibold text-left transition-colors cursor-pointer ${
                       !effectiveActiveCategoryId ? 'bg-blue-600 text-white' : 'text-slate-800 hover:bg-slate-50 active:bg-slate-100'
                     }`}
@@ -208,7 +226,7 @@ export function CatalogShell({ categories, branchId, storeName = 'SYD Constructi
                     <Link
                       key={cat.id}
                       href={categoryHref(cat.id, categories)}
-                      onClick={() => { clearSearch(); closeMobileSidebar() }}
+                      onClick={() => { clearSearch(); closeMobileSidebar(); trackCategorySelect(cat.name) }}
                       className={`w-full flex items-center justify-between px-4 py-4 rounded-xl text-base font-semibold text-left transition-colors cursor-pointer ${
                         effectiveActiveCategoryId === cat.id ? 'bg-blue-600 text-white' : 'text-slate-800 hover:bg-slate-50 active:bg-slate-100'
                       }`}

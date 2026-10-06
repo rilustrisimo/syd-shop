@@ -9,6 +9,7 @@ import { getStockMap } from '@/lib/supabase/queries/products'
 import { formatPrice } from '@/components/currency'
 import { QtyInput } from '@/components/qty-input'
 import { optimizedImageUrl } from '@/lib/image'
+import { pushDataLayerEvent } from '@/lib/analytics'
 
 interface CartClientProps {
   branchId: string
@@ -34,6 +35,14 @@ export function CartClient({ branchId }: CartClientProps) {
   }
 
   const requestCount = items.filter(i => isRequest(i.product_id, i.quantity)).length
+
+  function handleBeginCheckout() {
+    pushDataLayerEvent('begin_checkout', {
+      currency: 'PHP',
+      value: subtotal,
+      items: items.map(i => ({ item_id: i.product_id, item_name: i.product_name, price: i.unit_price, quantity: i.quantity })),
+    })
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -215,12 +224,13 @@ export function CartClient({ branchId }: CartClientProps) {
                   )}
                   <Link
                     href="/checkout"
+                    onClick={handleBeginCheckout}
                     className="block w-full text-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl transition-colors"
                   >
                     Proceed to Checkout
                   </Link>
                   <p className="text-xs text-slate-400 text-center">
-                    Delivery fee calculated based on your location
+                    Delivery fee confirmed by our staff after you order
                   </p>
                 </div>
               </div>
@@ -238,6 +248,7 @@ export function CartClient({ branchId }: CartClientProps) {
           </div>
           <Link
             href="/checkout"
+            onClick={handleBeginCheckout}
             className="flex items-center justify-center gap-2 w-full bg-[#ffc107] hover:bg-amber-400 text-slate-900 font-bold py-3.5 rounded-xl transition-colors"
           >
             <ShoppingCart className="w-4 h-4" />
