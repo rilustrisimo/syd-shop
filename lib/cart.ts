@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import type { CartItem } from '@/lib/types'
-import { pushDataLayerEvent } from '@/lib/analytics'
+import { pushEcommerceEvent } from '@/lib/analytics'
 
 const CART_KEY = 'syd_shop_cart'
 // Every component that calls useCart() gets its own independent local
@@ -76,7 +76,7 @@ export function useCart() {
     // The single hook point for every "Add to Cart" button app-wide —
     // every useCart() instance's addItem runs this same function body
     // regardless of which component called it.
-    pushDataLayerEvent('add_to_cart', {
+    pushEcommerceEvent('add_to_cart', {
       currency: 'PHP',
       value: item.unit_price * item.quantity,
       items: [{ item_id: item.product_id, item_name: item.product_name, price: item.unit_price, quantity: item.quantity }],

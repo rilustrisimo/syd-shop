@@ -9,7 +9,7 @@ import { getStockMap } from '@/lib/supabase/queries/products'
 import { formatPrice } from '@/components/currency'
 import { QtyInput } from '@/components/qty-input'
 import { optimizedImageUrl } from '@/lib/image'
-import { pushDataLayerEvent } from '@/lib/analytics'
+import { pushEcommerceEvent } from '@/lib/analytics'
 
 interface CartClientProps {
   branchId: string
@@ -37,7 +37,7 @@ export function CartClient({ branchId }: CartClientProps) {
   const requestCount = items.filter(i => isRequest(i.product_id, i.quantity)).length
 
   function handleBeginCheckout() {
-    pushDataLayerEvent('begin_checkout', {
+    pushEcommerceEvent('begin_checkout', {
       currency: 'PHP',
       value: subtotal,
       items: items.map(i => ({ item_id: i.product_id, item_name: i.product_name, price: i.unit_price, quantity: i.quantity })),
