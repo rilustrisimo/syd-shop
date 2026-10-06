@@ -72,10 +72,14 @@ export default async function OrderConfirmationPage({ params }: Props) {
             </div>
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">🎉 Order Submitted!</h1>
+            <h1 className="text-2xl font-bold text-slate-900">
+              {settings?.hide_prices ? '📝 Request Submitted!' : '🎉 Order Submitted!'}
+            </h1>
             <p className="text-slate-500 text-sm mt-1">
               {order.customer_name ? `Thanks, ${order.customer_name.split(' ')[0]}!` : 'Thanks so much!'}{' '}
-              We&apos;ve got your order and we&apos;re excited to get it ready for you.
+              {settings?.hide_prices
+                ? "We've got your request and we'll be in touch with pricing shortly."
+                : "We've got your order and we're excited to get it ready for you."}
             </p>
           </div>
           <div className="inline-block bg-slate-900 border border-slate-700 rounded-xl px-5 py-2">
@@ -97,8 +101,9 @@ export default async function OrderConfirmationPage({ params }: Props) {
               <div>
                 <p className="text-sm font-medium text-slate-800">An agent will reach out shortly 📞</p>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  One of our team will call or text <strong>{order.customer_phone}</strong> to confirm the
-                  details and finalize your order.
+                  {settings?.hide_prices
+                    ? <>One of our team will call or text <strong>{order.customer_phone}</strong> with pricing and availability for your request.</>
+                    : <>One of our team will call or text <strong>{order.customer_phone}</strong> to confirm the details and finalize your order.</>}
                 </p>
               </div>
             </div>
@@ -164,27 +169,31 @@ export default async function OrderConfirmationPage({ params }: Props) {
                     {line.product_name}
                     <span className="text-slate-400 ml-1">× {line.quantity} {line.unit_label}</span>
                   </span>
-                  <span className="font-medium text-slate-900 flex-shrink-0">{formatPrice(line.line_total)}</span>
+                  {!settings?.hide_prices && (
+                    <span className="font-medium text-slate-900 flex-shrink-0">{formatPrice(line.line_total)}</span>
+                  )}
                 </div>
               ))}
             </div>
 
-            <div className="border-t border-slate-100 mt-4 pt-3 space-y-1.5">
-              <div className="flex justify-between text-sm text-slate-500">
-                <span>Subtotal</span>
-                <span>{formatPrice(order.subtotal)}</span>
-              </div>
-              {order.fulfillment === 'delivery' && (
+            {!settings?.hide_prices && (
+              <div className="border-t border-slate-100 mt-4 pt-3 space-y-1.5">
                 <div className="flex justify-between text-sm text-slate-500">
-                  <span>Delivery fee</span>
-                  <span className="italic text-slate-400">To be confirmed</span>
+                  <span>Subtotal</span>
+                  <span>{formatPrice(order.subtotal)}</span>
                 </div>
-              )}
-              <div className="flex justify-between font-bold text-slate-900 pt-1.5 border-t border-slate-100">
-                <span>{order.fulfillment === 'delivery' ? 'Subtotal' : 'Total'}</span>
-                <span className="text-[#ffc107] text-base">{formatPrice(order.total_amount)}</span>
+                {order.fulfillment === 'delivery' && (
+                  <div className="flex justify-between text-sm text-slate-500">
+                    <span>Delivery fee</span>
+                    <span className="italic text-slate-400">To be confirmed</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-bold text-slate-900 pt-1.5 border-t border-slate-100">
+                  <span>{order.fulfillment === 'delivery' ? 'Subtotal' : 'Total'}</span>
+                  <span className="text-[#ffc107] text-base">{formatPrice(order.total_amount)}</span>
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-400 space-y-1">
               <p>

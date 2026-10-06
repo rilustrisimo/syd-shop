@@ -11,6 +11,7 @@ export default async function CatalogLayout({ children }: { children: React.Reac
       categories={categories}
       branchId={branchId}
       storeName={settings?.store_name ?? 'SYD Construction Supplies'}
+      hidePrices={settings?.hide_prices ?? false}
     >
       {children}
     </CatalogShell>

@@ -8,6 +8,9 @@ export interface CatalogContextValue {
   categories: ShopCategory[]
   search: string
   setSearch: (search: string) => void
+  // "Request a Quote" mode — true hides every price/total and the
+  // in-stock-vs-request styling distinction site-wide.
+  hidePrices: boolean
   cart: {
     items: CartItem[]
     itemCount: number

@@ -127,8 +127,11 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
         <div className="flex items-start gap-2.5 bg-green-50 border border-green-200 rounded-xl px-4 py-3 mb-4">
           <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
           <p className="text-sm text-green-800 leading-relaxed">
-            Just fill in the details below. Our staff will
-            <strong> call you to confirm your order</strong>, and you can still make changes before we prepare anything.
+            {settings.hide_prices ? (
+              <>Just fill in the details below. Our staff will<strong> call you with pricing to confirm your request</strong>, and nothing is final until then.</>
+            ) : (
+              <>Just fill in the details below. Our staff will<strong> call you to confirm your order</strong>, and you can still make changes before we prepare anything.</>
+            )}
           </p>
         </div>
         <div className="lg:grid lg:grid-cols-5 lg:gap-8">
@@ -277,26 +280,30 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
                         <p className="text-xs font-medium text-slate-800 line-clamp-2 leading-snug">{item.product_name}</p>
                         <p className="text-xs text-slate-400 mt-0.5">×{item.quantity} {item.unit_label}</p>
                       </div>
-                      <p className="text-xs font-bold text-slate-900 flex-shrink-0">{formatPrice(item.unit_price * item.quantity)}</p>
+                      {!settings.hide_prices && (
+                        <p className="text-xs font-bold text-slate-900 flex-shrink-0">{formatPrice(item.unit_price * item.quantity)}</p>
+                      )}
                     </div>
                   ))}
 
-                  <div className="border-t border-slate-100 pt-3 space-y-1.5">
-                    <div className="flex justify-between text-sm text-slate-600">
-                      <span>Subtotal</span>
-                      <span>{formatPrice(subtotal)}</span>
-                    </div>
-                    {fulfillment === 'delivery' && (
+                  {!settings.hide_prices && (
+                    <div className="border-t border-slate-100 pt-3 space-y-1.5">
                       <div className="flex justify-between text-sm text-slate-600">
-                        <span>Delivery fee</span>
-                        <span className="italic text-slate-400">To be confirmed</span>
+                        <span>Subtotal</span>
+                        <span>{formatPrice(subtotal)}</span>
                       </div>
-                    )}
-                    <div className="flex justify-between font-bold text-slate-900 pt-1 border-t border-slate-100">
-                      <span>{fulfillment === 'delivery' ? 'Subtotal' : 'Total'}</span>
-                      <span className="text-[#ffc107] text-base">{formatPrice(total)}</span>
+                      {fulfillment === 'delivery' && (
+                        <div className="flex justify-between text-sm text-slate-600">
+                          <span>Delivery fee</span>
+                          <span className="italic text-slate-400">To be confirmed</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between font-bold text-slate-900 pt-1 border-t border-slate-100">
+                        <span>{fulfillment === 'delivery' ? 'Subtotal' : 'Total'}</span>
+                        <span className="text-[#ffc107] text-base">{formatPrice(total)}</span>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
 
@@ -304,14 +311,18 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm">
                 <p className="font-semibold text-blue-900 mb-1">What happens next?</p>
                 <p className="text-blue-800 text-xs leading-relaxed">
-                  After placing your order, our staff will contact you at <strong>{phone || 'your number'}</strong> to confirm.
+                  {settings.hide_prices
+                    ? <>After submitting your request, our staff will contact you at <strong>{phone || 'your number'}</strong> with pricing and availability.</>
+                    : <>After placing your order, our staff will contact you at <strong>{phone || 'your number'}</strong> to confirm.</>}
                   {settings.store_hours && <span className="block mt-1 text-blue-600">Hours: {settings.store_hours}</span>}
                 </p>
               </div>
 
               <button type="submit" disabled={submitting}
                 className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl text-sm transition-colors shadow-md">
-                {submitting ? 'Placing Order...' : `Place Order · ${formatPrice(total)}`}
+                {settings.hide_prices
+                  ? (submitting ? 'Submitting Request...' : 'Submit Request')
+                  : (submitting ? 'Placing Order...' : `Place Order · ${formatPrice(total)}`)}
               </button>
             </div>
           </div>
@@ -327,26 +338,32 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
               {items.map(item => (
                 <div key={item.product_id} className="flex justify-between text-xs text-slate-600">
                   <span className="truncate pr-2">{item.product_name} ×{item.quantity}</span>
-                  <span className="font-medium flex-shrink-0">{formatPrice(item.unit_price * item.quantity)}</span>
+                  {!settings.hide_prices && (
+                    <span className="font-medium flex-shrink-0">{formatPrice(item.unit_price * item.quantity)}</span>
+                  )}
                 </div>
               ))}
-              <div className="border-t border-slate-100 pt-2 space-y-1">
-                {fulfillment === 'delivery' && (
-                  <div className="flex justify-between text-sm text-slate-600">
-                    <span>Delivery fee</span>
-                    <span className="italic text-slate-400">To be confirmed</span>
+              {!settings.hide_prices && (
+                <div className="border-t border-slate-100 pt-2 space-y-1">
+                  {fulfillment === 'delivery' && (
+                    <div className="flex justify-between text-sm text-slate-600">
+                      <span>Delivery fee</span>
+                      <span className="italic text-slate-400">To be confirmed</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-bold text-slate-900">
+                    <span>{fulfillment === 'delivery' ? 'Subtotal' : 'Total'}</span>
+                    <span className="text-[#ffc107]">{formatPrice(total)}</span>
                   </div>
-                )}
-                <div className="flex justify-between font-bold text-slate-900">
-                  <span>{fulfillment === 'delivery' ? 'Subtotal' : 'Total'}</span>
-                  <span className="text-[#ffc107]">{formatPrice(total)}</span>
                 </div>
-              </div>
+              )}
             </div>
           </div>
 
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-800">
-            Our staff will contact you at <strong>{phone || 'your number'}</strong> to confirm your order.
+            {settings.hide_prices
+              ? <>Our staff will contact you at <strong>{phone || 'your number'}</strong> with pricing and availability.</>
+              : <>Our staff will contact you at <strong>{phone || 'your number'}</strong> to confirm your order.</>}
             {settings.store_hours && <span className="block mt-0.5 text-blue-600">Hours: {settings.store_hours}</span>}
           </div>
         </div>
@@ -360,7 +377,9 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
           onClick={handleSubmit as any}
           className="w-full bg-[#ffc107] hover:bg-amber-400 disabled:opacity-60 text-slate-900 font-bold py-3.5 rounded-xl text-sm transition-colors"
         >
-          {submitting ? 'Placing Order...' : `Place Order · ${formatPrice(total)}`}
+          {settings.hide_prices
+            ? (submitting ? 'Submitting Request...' : 'Submit Request')
+            : (submitting ? 'Placing Order...' : `Place Order · ${formatPrice(total)}`)}
         </button>
       </div>
 

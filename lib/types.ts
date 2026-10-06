@@ -17,6 +17,9 @@ export interface ShopSettings {
   delivery_fee_per_km: number
   cod_radius_km: number
   branch_id: string | null
+  // "Request a Quote" mode — when true, no prices/totals are shown
+  // anywhere public-facing; staff call back with pricing instead.
+  hide_prices: boolean
 }
 
 // Public-safe version (no store coordinates)

@@ -13,9 +13,10 @@ import { pushEcommerceEvent } from '@/lib/analytics'
 
 interface CartClientProps {
   branchId: string
+  hidePrices?: boolean
 }
 
-export function CartClient({ branchId }: CartClientProps) {
+export function CartClient({ branchId, hidePrices = false }: CartClientProps) {
   const { items, itemCount, subtotal, updateQuantity, removeItem, clearCart } = useCart()
   const [stock, setStock] = useState<Record<string, number>>({})
 
@@ -31,6 +32,9 @@ export function CartClient({ branchId }: CartClientProps) {
   }, [items, branchId])
 
   function isRequest(productId: string, quantity: number) {
+    // In Request a Quote mode every item is just a request — no
+    // in-stock/on-request visual split anywhere in the cart.
+    if (hidePrices) return false
     return quantity > (stock[productId] ?? 0)
   }
 
@@ -99,6 +103,15 @@ export function CartClient({ branchId }: CartClientProps) {
             </div>
           )}
 
+          {hidePrices && (
+            <div className="mb-4 flex items-start gap-2.5 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+              <Clock className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-blue-800">
+                This is a <strong>request</strong>, not a confirmed order. Our staff will call you with pricing and availability before anything is finalized.
+              </p>
+            </div>
+          )}
+
           <div className="lg:grid lg:grid-cols-3 lg:gap-6">
             {/* Cart items */}
             <div className="lg:col-span-2 space-y-3">
@@ -147,7 +160,9 @@ export function CartClient({ branchId }: CartClientProps) {
                             On Request
                           </span>
                         )}
-                        <p className="text-xs text-slate-400 mt-0.5">{formatPrice(item.unit_price)} per {item.unit_label}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {hidePrices ? `per ${item.unit_label}` : `${formatPrice(item.unit_price)} per ${item.unit_label}`}
+                        </p>
 
                         <div className="flex items-center flex-wrap justify-between gap-x-3 gap-y-2 mt-3">
                           {/* Qty stepper */}
@@ -177,9 +192,11 @@ export function CartClient({ branchId }: CartClientProps) {
                             </button>
                           </div>
 
-                          <p className="text-sm font-bold text-slate-900 ml-auto">
-                            {formatPrice(item.unit_price * item.quantity)}
-                          </p>
+                          {!hidePrices && (
+                            <p className="text-sm font-bold text-slate-900 ml-auto">
+                              {formatPrice(item.unit_price * item.quantity)}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -205,18 +222,20 @@ export function CartClient({ branchId }: CartClientProps) {
                 <div className="p-5 space-y-4">
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between text-slate-600">
-                      <span>Subtotal ({itemCount} {itemCount === 1 ? 'item' : 'items'})</span>
-                      <span>{formatPrice(subtotal)}</span>
+                      <span>{itemCount} {itemCount === 1 ? 'item' : 'items'}</span>
+                      {!hidePrices && <span>{formatPrice(subtotal)}</span>}
                     </div>
                     <div className="flex justify-between text-slate-400 text-xs">
                       <span>Delivery fee</span>
-                      <span>Calculated at checkout</span>
+                      <span>{hidePrices ? 'Confirmed by staff' : 'Calculated at checkout'}</span>
                     </div>
                   </div>
-                  <div className="border-t border-slate-100 pt-3 flex justify-between font-bold text-slate-900">
-                    <span>Subtotal</span>
-                    <span className="text-[#ffc107] text-base">{formatPrice(subtotal)}</span>
-                  </div>
+                  {!hidePrices && (
+                    <div className="border-t border-slate-100 pt-3 flex justify-between font-bold text-slate-900">
+                      <span>Subtotal</span>
+                      <span className="text-[#ffc107] text-base">{formatPrice(subtotal)}</span>
+                    </div>
+                  )}
                   {requestCount > 0 && (
                     <p className="text-[11px] text-amber-600">
                       Includes {requestCount} item{requestCount > 1 ? 's' : ''} on request — total shown assumes full quantity is fulfilled.
@@ -230,7 +249,9 @@ export function CartClient({ branchId }: CartClientProps) {
                     Proceed to Checkout
                   </Link>
                   <p className="text-xs text-slate-400 text-center">
-                    Delivery fee confirmed by our staff after you order
+                    {hidePrices
+                      ? 'Our staff will call you with pricing and delivery details'
+                      : 'Delivery fee confirmed by our staff after you order'}
                   </p>
                 </div>
               </div>
@@ -243,8 +264,8 @@ export function CartClient({ branchId }: CartClientProps) {
       {itemCount > 0 && (
         <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900 border-t border-slate-800 p-3 shadow-lg">
           <div className="flex items-center justify-between mb-2 px-1">
-            <span className="text-sm text-slate-400">Subtotal</span>
-            <span className="font-bold text-[#ffc107]">{formatPrice(subtotal)}</span>
+            <span className="text-sm text-slate-400">{itemCount} {itemCount === 1 ? 'item' : 'items'}</span>
+            {!hidePrices && <span className="font-bold text-[#ffc107]">{formatPrice(subtotal)}</span>}
           </div>
           <Link
             href="/checkout"

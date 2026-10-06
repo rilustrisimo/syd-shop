@@ -20,6 +20,7 @@ interface ProductGridProps {
 interface ProductCardProps {
   product: ShopProduct
   qty: number
+  hidePrices: boolean
   onAdd: (product: ShopProduct) => void
   onUpdateQuantity: (productId: string, quantity: number) => void
 }
@@ -27,7 +28,12 @@ interface ProductCardProps {
 // Memoized so a parent re-render (e.g. the breadcrumb updating on every
 // search keystroke) doesn't force all ~24 visible cards to re-render too —
 // each card only re-renders when its own product/qty actually changes.
-const ProductCard = memo(function ProductCard({ product, qty, onAdd, onUpdateQuantity }: ProductCardProps) {
+const ProductCard = memo(function ProductCard({ product, qty, hidePrices, onAdd, onUpdateQuantity }: ProductCardProps) {
+  // In "Request a Quote" mode every product is just a request — the
+  // in-stock/on-request visual split (and its amber styling) stops being
+  // meaningful once nothing on the site shows a price or a confirmed order.
+  const inStock = hidePrices || product.in_stock
+
   return (
     <div className="group bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col shadow-sm hover:shadow-md hover:border-blue-200 transition-all">
       <Link href={`/products/${product.id}`} className="block">
@@ -46,7 +52,7 @@ const ProductCard = memo(function ProductCard({ product, qty, onAdd, onUpdateQua
               <Package className="w-12 h-12 text-slate-200" />
             </div>
           )}
-          {!product.in_stock && (
+          {!inStock && (
             <div className="absolute inset-0 bg-slate-900/50 flex items-center justify-center">
               <span className="text-white text-xs font-semibold bg-slate-900/70 px-3 py-1 rounded-full">
                 Out of Stock
@@ -62,35 +68,37 @@ const ProductCard = memo(function ProductCard({ product, qty, onAdd, onUpdateQua
         </Link>
 
         <div className="mt-auto space-y-2">
-          <div>
-            <p className="text-base font-bold text-[#ffc107]">{formatPrice(product.current_selling_price)}</p>
-            <p className="text-[11px] text-slate-400">per {product.unit_label}</p>
-          </div>
+          {!hidePrices && (
+            <div>
+              <p className="text-base font-bold text-[#ffc107]">{formatPrice(product.current_selling_price)}</p>
+              <p className="text-[11px] text-slate-400">per {product.unit_label}</p>
+            </div>
+          )}
 
           {qty === 0 ? (
             <button
               onClick={() => onAdd(product)}
               className={`w-full flex items-center justify-center gap-1.5 text-xs font-semibold py-2 rounded-lg transition-colors ${
-                product.in_stock
+                inStock
                   ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white'
                   : 'bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white'
               }`}
             >
               <Plus className="w-3.5 h-3.5" />
-              {product.in_stock ? 'Add to Cart' : 'Request'}
+              {inStock ? 'Add to Cart' : 'Request'}
             </button>
           ) : (
             <div>
-              {!product.in_stock && (
+              {!inStock && (
                 <p className="text-[10px] font-semibold text-amber-600 mb-1 text-center">On Request</p>
               )}
               <div className={`flex items-center justify-between rounded-lg px-2 py-1.5 border ${
-                product.in_stock ? 'bg-blue-50 border-blue-200' : 'bg-amber-50 border-amber-200'
+                inStock ? 'bg-blue-50 border-blue-200' : 'bg-amber-50 border-amber-200'
               }`}>
                 <button
                   onClick={() => onUpdateQuantity(product.id, qty - 1)}
                   className={`w-6 h-6 flex items-center justify-center rounded-full bg-white border ${
-                    product.in_stock
+                    inStock
                       ? 'border-blue-300 text-blue-600 hover:bg-blue-100'
                       : 'border-amber-300 text-amber-600 hover:bg-amber-100'
                   }`}
@@ -100,12 +108,12 @@ const ProductCard = memo(function ProductCard({ product, qty, onAdd, onUpdateQua
                 <QtyInput
                   value={qty}
                   onChange={(v) => onUpdateQuantity(product.id, v)}
-                  className={`w-14 text-center text-sm font-bold ${product.in_stock ? 'text-blue-700' : 'text-amber-700'}`}
+                  className={`w-14 text-center text-sm font-bold ${inStock ? 'text-blue-700' : 'text-amber-700'}`}
                 />
                 <button
                   onClick={() => onUpdateQuantity(product.id, qty + 1)}
                   className={`w-6 h-6 flex items-center justify-center rounded-full text-white ${
-                    product.in_stock ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-500 hover:bg-amber-600'
+                    inStock ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-500 hover:bg-amber-600'
                   }`}
                 >
                   <Plus className="w-3 h-3" />
@@ -120,7 +128,7 @@ const ProductCard = memo(function ProductCard({ product, qty, onAdd, onUpdateQua
 })
 
 export function ProductGrid({ categoryId }: ProductGridProps) {
-  const { branchId, categories, search, setSearch, cart } = useCatalogContext()
+  const { branchId, categories, search, setSearch, hidePrices, cart } = useCatalogContext()
   const { items, addItem, updateQuantity } = cart
   const [products, setProducts] = useState<ShopProduct[]>([])
   const [total, setTotal] = useState(0)
@@ -249,6 +257,7 @@ export function ProductGrid({ categoryId }: ProductGridProps) {
               key={product.id}
               product={product}
               qty={items.find(i => i.product_id === product.id)?.quantity ?? 0}
+              hidePrices={hidePrices}
               onAdd={handleAdd}
               onUpdateQuantity={updateQuantity}
             />

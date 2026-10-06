@@ -27,7 +27,7 @@ export async function getPublicShopSettings(): Promise<PublicShopSettings | null
       bank_name, bank_account_no, bank_account_name,
       qr_code_url, store_hours, staff_notification_emails,
       delivery_fee_flat, delivery_fee_per_km, cod_radius_km,
-      branch_id
+      branch_id, hide_prices
     `)
     .limit(1)
     .single()

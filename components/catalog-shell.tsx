@@ -16,6 +16,7 @@ interface CatalogShellProps {
   categories: ShopCategory[]
   branchId: string
   storeName?: string
+  hidePrices?: boolean
   children: React.ReactNode
 }
 
@@ -28,7 +29,7 @@ function categoryHref(categoryId: string, categories: ShopCategory[]) {
 // navigations between "/" and "/category/[slug]" (both render inside this
 // shell's layout), so switching categories only ever replaces the product
 // grid area, not the nav bar.
-export function CatalogShell({ categories, branchId, storeName = 'SYD Construction Supplies', children }: CatalogShellProps) {
+export function CatalogShell({ categories, branchId, storeName = 'SYD Construction Supplies', hidePrices = false, children }: CatalogShellProps) {
   const pathname = usePathname()
   const activeCategoryId = categories.find(c => `/category/${slugify(c.name)}` === pathname)?.id
   const { items, itemCount, subtotal, addItem, updateQuantity } = useCart()
@@ -85,9 +86,10 @@ export function CatalogShell({ categories, branchId, storeName = 'SYD Constructi
       categories,
       search,
       setSearch,
+      hidePrices,
       cart: { items, itemCount, subtotal, addItem, updateQuantity },
     }),
-    [branchId, categories, search, items, itemCount, subtotal, addItem, updateQuantity]
+    [branchId, categories, search, hidePrices, items, itemCount, subtotal, addItem, updateQuantity]
   )
 
   return (
@@ -259,7 +261,7 @@ export function CatalogShell({ categories, branchId, storeName = 'SYD Constructi
                 </span>
                 <span className="text-sm">View Cart</span>
               </div>
-              <span className="font-bold">{formatPrice(subtotal)}</span>
+              {!hidePrices && <span className="font-bold">{formatPrice(subtotal)}</span>}
             </Link>
           </div>
         )}
@@ -272,7 +274,7 @@ export function CatalogShell({ categories, branchId, storeName = 'SYD Constructi
           >
             <ShoppingCart className="w-4 h-4" />
             <span>{itemCount} {itemCount === 1 ? 'item' : 'items'}</span>
-            <span className="bg-slate-900/15 rounded-full px-2 py-0.5 text-sm">{formatPrice(subtotal)}</span>
+            {!hidePrices && <span className="bg-slate-900/15 rounded-full px-2 py-0.5 text-sm">{formatPrice(subtotal)}</span>}
           </Link>
         )}
       </div>

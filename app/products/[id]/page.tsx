@@ -21,11 +21,13 @@ export default function ProductDetailPage() {
   const [product, setProduct] = useState<ShopProductDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedImage, setSelectedImage] = useState(0)
+  const [hidePrices, setHidePrices] = useState(false)
 
   useEffect(() => {
     async function load() {
       const settings = await getPublicShopSettings()
       const branchId = settings?.branch_id ?? ''
+      setHidePrices(settings?.hide_prices ?? false)
       const data = await getProductById(id, branchId)
       setProduct(data)
       setLoading(false)
@@ -84,6 +86,10 @@ export default function ProductDetailPage() {
       </div>
     )
   }
+
+  // In "Request a Quote" mode every product is just a request — no
+  // in-stock/on-request visual split, matching the product grid.
+  const inStock = hidePrices || product.in_stock
 
   const images = product.images.length > 0
     ? product.images
@@ -144,7 +150,7 @@ export default function ProductDetailPage() {
                   <Package className="w-20 h-20 text-slate-200" />
                 </div>
               )}
-              {!product.in_stock && (
+              {!inStock && (
                 <div className="absolute inset-0 bg-black/40 flex items-end justify-center pb-6">
                   <span className="text-white font-semibold text-sm bg-black/60 px-4 py-2 rounded-full">
                     Out of Stock
@@ -195,24 +201,30 @@ export default function ProductDetailPage() {
             </div>
 
             {/* Price */}
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-[#ffc107]">{formatPrice(product.current_selling_price)}</span>
-              <span className="text-sm text-slate-400">per {product.unit_label}</span>
-            </div>
+            {!hidePrices && (
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-bold text-[#ffc107]">{formatPrice(product.current_selling_price)}</span>
+                <span className="text-sm text-slate-400">per {product.unit_label}</span>
+              </div>
+            )}
 
-            {/* Stock status */}
-            {product.in_stock ? (
-              <div className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-3 py-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                In Stock
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                <p className="text-xs font-medium">
-                  Currently out of stock — you can still order it on request. Staff will confirm availability and delivery timing when they call.
-                </p>
-              </div>
+            {/* Stock status — in Request a Quote mode every item is just a
+                request, so no stock badge is shown at all (not even "In
+                Stock"), matching the uniform treatment on the grid. */}
+            {!hidePrices && (
+              product.in_stock ? (
+                <div className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-3 py-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                  In Stock
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <p className="text-xs font-medium">
+                    Currently out of stock — you can still order it on request. Staff will confirm availability and delivery timing when they call.
+                  </p>
+                </div>
+              )
             )}
 
             {/* Description */}
@@ -228,29 +240,29 @@ export default function ProductDetailPage() {
                 <button
                   onClick={handleAdd}
                   className={`w-full text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm ${
-                    product.in_stock ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-500 hover:bg-amber-600'
+                    inStock ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-500 hover:bg-amber-600'
                   }`}
                 >
                   <Plus className="w-5 h-5" />
-                  {product.in_stock ? 'Add to Cart' : 'Request This Item'}
+                  {inStock ? 'Add to Cart' : 'Request This Item'}
                 </button>
               ) : (
                 <div className="space-y-3">
-                  {!product.in_stock && (
+                  {!inStock && (
                     <p className="text-xs font-semibold text-amber-600 text-center">On Request — staff will confirm availability</p>
                   )}
                   <div className={`flex items-center justify-between rounded-xl px-5 py-3 border ${
-                    product.in_stock ? 'bg-blue-50 border-blue-200' : 'bg-amber-50 border-amber-200'
+                    inStock ? 'bg-blue-50 border-blue-200' : 'bg-amber-50 border-amber-200'
                   }`}>
                     <button
                       onClick={() => updateQuantity(product.id, cartQty - 1)}
                       className={`w-9 h-9 flex items-center justify-center rounded-full bg-white border transition-colors ${
-                        product.in_stock ? 'border-blue-300 text-blue-600 hover:bg-blue-100' : 'border-amber-300 text-amber-600 hover:bg-amber-100'
+                        inStock ? 'border-blue-300 text-blue-600 hover:bg-blue-100' : 'border-amber-300 text-amber-600 hover:bg-amber-100'
                       }`}
                     >
                       <Minus className="w-4 h-4" />
                     </button>
-                    <span className={`flex items-center gap-1.5 text-xl font-bold ${product.in_stock ? 'text-blue-700' : 'text-amber-700'}`}>
+                    <span className={`flex items-center gap-1.5 text-xl font-bold ${inStock ? 'text-blue-700' : 'text-amber-700'}`}>
                       <QtyInput
                         value={cartQty}
                         onChange={(v) => updateQuantity(product.id, v)}
@@ -261,7 +273,7 @@ export default function ProductDetailPage() {
                     <button
                       onClick={() => updateQuantity(product.id, cartQty + 1)}
                       className={`w-9 h-9 flex items-center justify-center rounded-full text-white transition-colors ${
-                        product.in_stock ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-500 hover:bg-amber-600'
+                        inStock ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-500 hover:bg-amber-600'
                       }`}
                     >
                       <Plus className="w-4 h-4" />
@@ -272,7 +284,7 @@ export default function ProductDetailPage() {
                     className="flex items-center justify-center gap-1.5 w-full min-w-0 bg-[#ffc107] hover:bg-amber-400 text-slate-900 font-bold py-3.5 px-2 rounded-xl transition-colors"
                   >
                     <ShoppingCart className="w-4 h-4 flex-shrink-0" />
-                    <span className="min-w-0 truncate">Cart · {formatPrice(subtotal)}</span>
+                    <span className="min-w-0 truncate">{hidePrices ? 'View Cart' : `Cart · ${formatPrice(subtotal)}`}</span>
                   </Link>
                 </div>
               )}
@@ -290,7 +302,7 @@ export default function ProductDetailPage() {
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
                 <p className="text-base">🏪</p>
                 <p className="text-xs font-semibold text-slate-700 mt-1">Store Pickup</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">Free — COD accepted</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Free</p>
               </div>
             </div>
           </div>
@@ -303,11 +315,11 @@ export default function ProductDetailPage() {
           <button
             onClick={handleAdd}
             className={`w-full font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-colors ${
-              product.in_stock ? 'bg-[#ffc107] hover:bg-amber-400 text-slate-900' : 'bg-amber-500 hover:bg-amber-600 text-white'
+              inStock ? 'bg-[#ffc107] hover:bg-amber-400 text-slate-900' : 'bg-amber-500 hover:bg-amber-600 text-white'
             }`}
           >
             <Plus className="w-5 h-5" />
-            {product.in_stock ? 'Add to Cart' : 'Request This Item'}
+            {inStock ? 'Add to Cart' : 'Request This Item'}
           </button>
         ) : (
           <div className="flex items-center gap-2">
@@ -330,7 +342,7 @@ export default function ProductDetailPage() {
               <button
                 onClick={() => updateQuantity(product.id, cartQty + 1)}
                 className={`w-10 h-10 flex items-center justify-center rounded-lg text-white transition-colors ${
-                  product.in_stock ? 'bg-blue-600 hover:bg-blue-500' : 'bg-amber-500 hover:bg-amber-400'
+                  inStock ? 'bg-blue-600 hover:bg-blue-500' : 'bg-amber-500 hover:bg-amber-400'
                 }`}
               >
                 <Plus className="w-4 h-4" />
@@ -344,7 +356,7 @@ export default function ProductDetailPage() {
               {/* truncate (not wrap) so a large cart total never grows this
                   button taller than the qty stepper next to it — the exact
                   bug that kept resurfacing as totals got longer. */}
-              <span className="min-w-0 truncate">Cart · {formatPrice(subtotal)}</span>
+              <span className="min-w-0 truncate">{hidePrices ? 'View Cart' : `Cart · ${formatPrice(subtotal)}`}</span>
             </Link>
           </div>
         )}

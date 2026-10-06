@@ -7,5 +7,5 @@ export const metadata: Metadata = { title: 'Cart' }
 export default async function CartPage() {
   const settings = await getPublicShopSettings()
 
-  return <CartClient branchId={settings?.branch_id ?? ''} />
+  return <CartClient branchId={settings?.branch_id ?? ''} hidePrices={settings?.hide_prices ?? false} />
 }
