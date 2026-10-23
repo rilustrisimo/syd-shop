@@ -18,5 +18,8 @@
       "binding": "WORKER_SELF_REFERENCE",
       "service": "syd-shop"
     }
-  ]
+  ],
+  "vars": {
+    "NEXT_PUBLIC_GTM_ID": "GTM-NHSKD7Q8"
+  },
 }

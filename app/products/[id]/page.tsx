@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowLeft, Package, ShoppingCart, Plus, Minus, AlertCircle, Tag, ChevronRight } from 'lucide-react'
+import { ArrowLeft, Package, ShoppingCart, Plus, Minus, AlertCircle, Tag, ChevronRight, ClipboardList } from 'lucide-react'
 import { getProductById } from '@/lib/supabase/queries/products'
 import { getPublicShopSettings } from '@/lib/supabase/queries/shop-settings'
 import { useCart } from '@/lib/cart'
@@ -200,8 +200,22 @@ export default function ProductDetailPage() {
               </div>
             </div>
 
-            {/* Price */}
-            {!hidePrices && (
+            {/* Price — in Request a Quote mode this page sits outside the
+                catalog layout's notice bar, so the explanation lives here. */}
+            {hidePrices ? (
+              <div className="space-y-2">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-bold text-slate-800">Price on quote</span>
+                  <span className="text-sm text-slate-400">per {product.unit_label}</span>
+                </div>
+                <div className="flex items-start gap-2.5 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+                  <ClipboardList className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-blue-900">
+                    Add this item and the quantity you need, then submit your request. We&apos;ll message you with the final price and delivery fee, and no payment is needed until then.
+                  </p>
+                </div>
+              </div>
+            ) : (
               <div className="flex items-baseline gap-2">
                 <span className="text-3xl font-bold text-[#ffc107]">{formatPrice(product.current_selling_price)}</span>
                 <span className="text-sm text-slate-400">per {product.unit_label}</span>
@@ -297,7 +311,7 @@ export default function ProductDetailPage() {
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
                 <p className="text-base">🚚</p>
                 <p className="text-xs font-semibold text-slate-700 mt-1">Home Delivery</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">₱50 within 3km</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">{hidePrices ? 'Fee included in your quote' : '₱50 within 3km'}</p>
               </div>
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
                 <p className="text-base">🏪</p>

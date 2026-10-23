@@ -68,7 +68,12 @@ const ProductCard = memo(function ProductCard({ product, qty, hidePrices, onAdd,
         </Link>
 
         <div className="mt-auto space-y-2">
-          {!hidePrices && (
+          {hidePrices ? (
+            <div>
+              <p className="text-sm font-semibold text-slate-700">Price on quote</p>
+              <p className="text-[11px] text-slate-400">per {product.unit_label}</p>
+            </div>
+          ) : (
             <div>
               <p className="text-base font-bold text-[#ffc107]">{formatPrice(product.current_selling_price)}</p>
               <p className="text-[11px] text-slate-400">per {product.unit_label}</p>

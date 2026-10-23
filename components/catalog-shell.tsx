@@ -4,7 +4,7 @@ import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ShoppingCart, Search, Menu, X, ChevronRight } from 'lucide-react'
+import { ShoppingCart, Search, Menu, X, ChevronRight, ClipboardList } from 'lucide-react'
 import { useCart } from '@/lib/cart'
 import { slugify } from '@/lib/slug'
 import { CatalogContext } from '@/lib/catalog-context'
@@ -149,6 +149,27 @@ export function CatalogShell({ categories, branchId, storeName = 'SYD Constructi
             </div>
           </div>
         </header>
+
+        {/* ── Request a Quote notice ── customers were hunting for prices on
+            the catalog; this explains up front that the quote (final price +
+            delivery fee) comes after they submit. Not sticky, so it never
+            eats vertical space on small screens once they scroll. */}
+        {hidePrices && (
+          <div className="bg-blue-50 border-b border-blue-200">
+            <div className="max-w-7xl mx-auto px-4 lg:px-6 py-2.5 flex items-start sm:items-center gap-2.5">
+              <ClipboardList className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5 sm:mt-0" />
+              <p className="text-xs sm:text-sm text-blue-900">
+                <span className="sm:hidden">
+                  <strong>Add items &amp; quantities.</strong> We&apos;ll send your quote and delivery fee.
+                </span>
+                <span className="hidden sm:inline">
+                  <strong>Add the items and quantities you need, then submit your request.</strong>{' '}
+                  We&apos;ll message you with the final price and delivery fee, and no payment is needed until then.
+                </span>
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="flex-1 flex max-w-7xl mx-auto w-full px-4 lg:px-6 gap-6 py-6">
           {/* ── Desktop Category Sidebar ── */}

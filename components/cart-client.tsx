@@ -107,7 +107,7 @@ export function CartClient({ branchId, hidePrices = false }: CartClientProps) {
             <div className="mb-4 flex items-start gap-2.5 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
               <Clock className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
               <p className="text-xs text-blue-800">
-                This is a <strong>request</strong>, not a confirmed order. Our staff will call you with pricing and availability before anything is finalized.
+                This is a <strong>request</strong>, not a confirmed order. After you submit, our team will message you with the final price, delivery fee and availability before anything is finalized.
               </p>
             </div>
           )}
