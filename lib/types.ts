@@ -61,6 +61,23 @@ export interface CartItem {
   unit_price: number
   quantity: number
   image_url: string | null
+  /** Set for a special request — something not in the catalog that staff will quote. */
+  special?: SpecialRequestInfo
+}
+
+export interface SpecialRequestInfo {
+  /** Customer's details (size, brand, color…), may be empty. */
+  details: string
+  /** Storage paths in the private special-request-photos bucket. */
+  photos: string[]
+  /** Small data-URL previews of the photos, for showing in the cart. */
+  thumbs: string[]
+}
+
+export const SPECIAL_REQUEST_PREFIX = 'special-'
+
+export function isSpecialRequest(item: Pick<CartItem, 'product_id'>): boolean {
+  return item.product_id.startsWith(SPECIAL_REQUEST_PREFIX)
 }
 
 export type FulfillmentType = 'delivery' | 'pickup'

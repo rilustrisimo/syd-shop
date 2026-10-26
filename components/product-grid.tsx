@@ -3,7 +3,8 @@
 import { memo, useCallback, useDeferredValue, useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Plus, Minus, Package, Loader2 } from 'lucide-react'
+import { Plus, Minus, Package, Loader2, ClipboardList } from 'lucide-react'
+import { SpecialRequestDialog } from '@/components/special-request-dialog'
 import { fetchStorefrontProducts } from '@/app/(catalog)/actions'
 import { useCatalogContext } from '@/lib/catalog-context'
 import type { ShopProduct } from '@/lib/types'
@@ -134,6 +135,13 @@ const ProductCard = memo(function ProductCard({ product, qty, hidePrices, onAdd,
 
 export function ProductGrid({ categoryId }: ProductGridProps) {
   const { branchId, categories, search, setSearch, hidePrices, cart } = useCatalogContext()
+  const [requestOpen, setRequestOpen] = useState(false)
+  const [requestAdded, setRequestAdded] = useState(false)
+  useEffect(() => {
+    if (!requestAdded) return
+    const t = setTimeout(() => setRequestAdded(false), 6000)
+    return () => clearTimeout(t)
+  }, [requestAdded])
   const { items, addItem, updateQuantity } = cart
   const [products, setProducts] = useState<ShopProduct[]>([])
   const [total, setTotal] = useState(0)
@@ -246,9 +254,23 @@ export function ProductGrid({ categoryId }: ProductGridProps) {
           ))}
         </div>
       ) : products.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 text-slate-400 gap-3">
+        <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-3 text-center px-4">
           <Package className="w-14 h-14 opacity-30" />
-          <p className="text-sm font-medium">No products found</p>
+          <p className="text-sm font-medium">
+            {search.trim() ? <>No products found for &ldquo;{search.trim()}&rdquo;</> : 'No products found'}
+          </p>
+          <div className="mt-2 w-full max-w-md rounded-xl border border-blue-200 bg-blue-50 px-4 py-4 text-slate-700">
+            <p className="text-sm font-semibold text-slate-900">Can&apos;t find what you need?</p>
+            <p className="text-xs text-slate-600 mt-1">
+              Request it: describe the item, say how many, and add a photo if you have one. We&apos;ll check and include it in your quote.
+            </p>
+            <button
+              onClick={() => setRequestOpen(true)}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white"
+            >
+              <ClipboardList className="w-4 h-4" /> Request {search.trim() ? `"${search.trim().slice(0, 30)}"` : 'an item'}
+            </button>
+          </div>
           {search && (
             <button onClick={() => setSearch('')} className="text-blue-600 text-sm underline">
               Clear search
@@ -273,6 +295,34 @@ export function ProductGrid({ categoryId }: ProductGridProps) {
       {!loading && hasMore && (
         <div ref={sentinelRef} className="flex justify-center py-8">
           {loadingMore && <Loader2 className="w-5 h-5 animate-spin text-slate-400" />}
+        </div>
+      )}
+
+      {!loading && products.length > 0 && (
+        <div className="mt-6 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-sm text-slate-600">
+            <span className="font-semibold text-slate-800">Don&apos;t see what you need?</span> Request it and we&apos;ll include it in your quote.
+          </p>
+          <button
+            onClick={() => setRequestOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-blue-600 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+          >
+            <ClipboardList className="w-4 h-4" /> Request an item
+          </button>
+        </div>
+      )}
+
+      <SpecialRequestDialog
+        open={requestOpen}
+        onClose={() => setRequestOpen(false)}
+        initialName={products.length === 0 ? search.trim() : ''}
+        onAdded={() => setRequestAdded(true)}
+      />
+      {requestAdded && (
+        <div className="fixed bottom-24 lg:bottom-24 left-1/2 -translate-x-1/2 z-40 rounded-full bg-slate-900 text-white text-sm px-4 py-2 shadow-lg flex items-center gap-3">
+          Added to your request
+          <Link href="/cart" className="font-semibold text-[#ffc107] underline">View cart</Link>
+          <button onClick={() => setRequestAdded(false)} aria-label="Dismiss" className="text-slate-400">✕</button>
         </div>
       )}
     </>

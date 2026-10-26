@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, CheckCircle, X, ArrowLeft, Package, Truck } from 'lucide-react'
+import { AlertTriangle, CheckCircle, X, ArrowLeft, Package, Truck, ClipboardList } from 'lucide-react'
 import { useCart } from '@/lib/cart'
 import { formatPrice } from '@/components/currency'
 import { optimizedImageUrl } from '@/lib/image'
@@ -77,7 +77,10 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
     setError(null)
     setSubmitting(true)
 
-    const result = await submitOrder({ name, phone, fulfillment, street, barangay, municipality, province, notes, items })
+    // Photo previews (data URLs) are only for the browser; the server gets
+    // the stored photo paths.
+    const payloadItems = items.map((i) => (i.special ? { ...i, special: { ...i.special, thumbs: [] } } : i))
+    const result = await submitOrder({ name, phone, fulfillment, street, barangay, municipality, province, notes, items: payloadItems })
 
     if (result.error) {
       setError(result.error)
@@ -268,20 +271,28 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
                   {items.map(item => (
                     <div key={item.product_id} className="flex gap-3">
                       <div className="relative w-12 h-12 flex-shrink-0 rounded-lg overflow-hidden bg-slate-100">
-                        {item.image_url ? (
+                        {item.special?.thumbs[0] ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={item.special.thumbs[0]} alt="" className="w-full h-full object-cover" />
+                        ) : item.image_url ? (
                           <Image src={optimizedImageUrl(item.image_url, { width: 120 })} alt={item.product_name} fill className="object-cover" unoptimized />
                         ) : (
                           <div className="flex items-center justify-center h-full">
-                            <Package className="w-5 h-5 text-slate-300" />
+                            {item.special ? <ClipboardList className="w-5 h-5 text-blue-300" /> : <Package className="w-5 h-5 text-slate-300" />}
                           </div>
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium text-slate-800 line-clamp-2 leading-snug">{item.product_name}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">×{item.quantity} {item.unit_label}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          ×{item.quantity} {item.unit_label}
+                          {item.special && <span className="ml-1 text-blue-700 font-medium">· special request</span>}
+                        </p>
                       </div>
                       {!settings.hide_prices && (
-                        <p className="text-xs font-bold text-slate-900 flex-shrink-0">{formatPrice(item.unit_price * item.quantity)}</p>
+                        <p className="text-xs font-bold text-slate-900 flex-shrink-0">
+                          {item.special ? <span className="font-medium text-blue-700">Quote</span> : formatPrice(item.unit_price * item.quantity)}
+                        </p>
                       )}
                     </div>
                   ))}
@@ -339,7 +350,7 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
                 <div key={item.product_id} className="flex justify-between text-xs text-slate-600">
                   <span className="truncate pr-2">{item.product_name} ×{item.quantity}</span>
                   {!settings.hide_prices && (
-                    <span className="font-medium flex-shrink-0">{formatPrice(item.unit_price * item.quantity)}</span>
+                    <span className="font-medium flex-shrink-0">{item.special ? 'Quote' : formatPrice(item.unit_price * item.quantity)}</span>
                   )}
                 </div>
               ))}

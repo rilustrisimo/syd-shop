@@ -23,7 +23,7 @@ export default async function OrderConfirmationPage({ params }: Props) {
   const [{ data: order }, settings] = await Promise.all([
     supabase
       .from('online_orders')
-      .select('*, lines:online_order_lines(product_id, product_name, quantity, unit_label, unit_price, line_total)')
+      .select('*, lines:online_order_lines(product_id, product_name, quantity, unit_label, unit_price, line_total, is_special_request)')
       .eq('order_number', orderNumber)
       .single(),
     getPublicShopSettings(),
@@ -168,9 +168,14 @@ export default async function OrderConfirmationPage({ params }: Props) {
                   <span className="text-slate-700 flex-1 truncate pr-2">
                     {line.product_name}
                     <span className="text-slate-400 ml-1">× {line.quantity} {line.unit_label}</span>
+                    {line.is_special_request && (
+                      <span className="block text-xs text-blue-700">Special request: we&apos;ll check availability and include it in your quote.</span>
+                    )}
                   </span>
                   {!settings?.hide_prices && (
-                    <span className="font-medium text-slate-900 flex-shrink-0">{formatPrice(line.line_total)}</span>
+                    <span className="font-medium text-slate-900 flex-shrink-0">
+                      {line.is_special_request ? <span className="text-blue-700 text-xs">Quote</span> : formatPrice(line.line_total)}
+                    </span>
                   )}
                 </div>
               ))}

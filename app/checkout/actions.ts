@@ -3,7 +3,16 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { getShopSettings } from '@/lib/supabase/queries/shop-settings'
 import { Resend } from 'resend'
-import type { CartItem, FulfillmentType } from '@/lib/types'
+import { isSpecialRequest, type CartItem, type FulfillmentType } from '@/lib/types'
+
+const MAX_SPECIAL_REQUESTS = 5
+// Exactly what uploadSpecialRequestPhoto() produces — anything else is a
+// tampered cart and must not be attached to an order.
+const PHOTO_PATH = /^pending\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
 
 function normalizePhone(raw: string): string {
   const digits = raw.replace(/\D/g, '')
@@ -42,6 +51,31 @@ export async function submitOrder(payload: CheckoutPayload): Promise<CheckoutRes
     return { error: 'Invalid item quantity in your cart. Please review your cart and try again.' }
   }
 
+  // Special requests (items not in the catalog) are validated on their own —
+  // they have no product to check, and their photo paths must be ones our
+  // upload action could have produced.
+  const specialItems = items.filter(isSpecialRequest)
+  const catalogItems = items.filter(i => !isSpecialRequest(i))
+  if (specialItems.length > MAX_SPECIAL_REQUESTS) {
+    return { error: `Please keep special requests to ${MAX_SPECIAL_REQUESTS} per order.` }
+  }
+  const specialLines: { name: string; details: string; unit: string; quantity: number; photos: string[] }[] = []
+  for (const s of specialItems) {
+    const itemName = (s.product_name ?? '').trim().slice(0, 120)
+    const photos = Array.isArray(s.special?.photos) ? s.special!.photos : []
+    if (!itemName) return { error: 'A special request is missing its description. Please review your cart.' }
+    if (photos.length > 3 || photos.some(p => typeof p !== 'string' || !PHOTO_PATH.test(p))) {
+      return { error: 'A special request has an invalid photo. Please remove it and add the photo again.' }
+    }
+    specialLines.push({
+      name: itemName,
+      details: (s.special?.details ?? '').trim().slice(0, 500),
+      unit: (s.unit_label ?? '').trim().slice(0, 20) || 'pcs',
+      quantity: Number(s.quantity),
+      photos,
+    })
+  }
+
   const settings = await getShopSettings()
   if (!settings) return { error: 'Shop is not configured. Please try again later.' }
 
@@ -51,14 +85,17 @@ export async function submitOrder(payload: CheckoutPayload): Promise<CheckoutRes
   // Re-validate items against the database — never trust client-submitted prices.
   // A tampered cart (edited localStorage) or a price/availability change since
   // the item was added must not be able to change what gets charged.
-  const { data: dbProducts, error: productsErr } = await supabase
-    .from('products')
-    .select(`
-      id, code, name, current_selling_price, is_active,
-      selling_uom:units_of_measure!products_selling_uom_id_fkey(code, name),
-      overrides:shop_product_overrides(hidden_online)
-    `)
-    .in('id', items.map(i => i.product_id))
+  // An order with only special requests has no catalog products to check.
+  const { data: dbProducts, error: productsErr } = catalogItems.length
+    ? await supabase
+        .from('products')
+        .select(`
+          id, code, name, current_selling_price, is_active,
+          selling_uom:units_of_measure!products_selling_uom_id_fkey(code, name),
+          overrides:shop_product_overrides(hidden_online)
+        `)
+        .in('id', catalogItems.map(i => i.product_id))
+    : { data: [], error: null }
 
   if (productsErr) {
     console.error('Product validation error:', productsErr.message)
@@ -67,7 +104,7 @@ export async function submitOrder(payload: CheckoutPayload): Promise<CheckoutRes
 
   const productMap = new Map((dbProducts ?? []).map((p: any) => [p.id, p]))
   const unavailable: string[] = []
-  const validatedItems = items.map(item => {
+  const validatedItems = catalogItems.map(item => {
     const p: any = productMap.get(item.product_id)
     if (!p || !p.is_active || p.overrides?.[0]?.hidden_online) {
       unavailable.push(item.product_name)
@@ -187,7 +224,24 @@ export async function submitOrder(payload: CheckoutPayload): Promise<CheckoutRes
     line_total: item.unit_price * item.quantity,
   }))
 
-  const { error: linesErr } = await supabase.from('online_order_lines').insert(lines)
+  const requestLines = specialLines.map(s => ({
+    order_id: order.id,
+    product_id: null,
+    product_code: 'SPECIAL',
+    product_name: s.name,
+    unit_label: s.unit,
+    unit_price: 0,
+    quantity: s.quantity,
+    line_total: 0,
+    is_special_request: true,
+    request_description: s.details || null,
+    request_photos: s.photos.length ? s.photos : null,
+  }))
+
+  const allLines = [...lines, ...requestLines]
+  const { error: linesErr } = allLines.length
+    ? await supabase.from('online_order_lines').insert(allLines)
+    : { error: null }
   if (linesErr) console.error('Order lines insert error:', linesErr.message)
 
   // Resend email notification
@@ -211,7 +265,10 @@ export async function submitOrder(payload: CheckoutPayload): Promise<CheckoutRes
             <p><strong>Fulfillment:</strong> ${fulfillment === 'delivery' ? 'Delivery (fee not yet set)' : 'Pickup'}</p>
             <p><strong>Payment:</strong> not yet selected — send a payment link once the order is finalized</p>
             <hr/>
-            <p><strong>Items:</strong><br>${itemsList}</p>
+            ${itemsList ? `<p><strong>Items:</strong><br>${itemsList}</p>` : ''}
+            ${specialLines.length ? `<p><strong>Special requests (not in catalog — needs a quote):</strong><br>${specialLines.map(s =>
+              `• ${escapeHtml(s.name)} × ${s.quantity} ${escapeHtml(s.unit)}${s.details ? ` — ${escapeHtml(s.details)}` : ''}${s.photos.length ? ` (${s.photos.length} photo${s.photos.length > 1 ? 's' : ''})` : ''}`
+            ).join('<br>')}</p>` : ''}
             <hr/>
             <p><strong>Subtotal:</strong> ₱${subtotal.toLocaleString('en-PH')}</p>
             ${notes ? `<p><strong>Notes:</strong> ${notes}</p>` : ''}

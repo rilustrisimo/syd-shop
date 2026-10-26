@@ -3,8 +3,10 @@
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowLeft, Package, Trash2, Plus, Minus, ShoppingBag, ShoppingCart, Clock } from 'lucide-react'
+import { ArrowLeft, Package, Trash2, Plus, Minus, ShoppingBag, ShoppingCart, Clock, ClipboardList } from 'lucide-react'
 import { useCart } from '@/lib/cart'
+import { isSpecialRequest, SPECIAL_REQUEST_PREFIX, type CartItem } from '@/lib/types'
+import { SpecialRequestDialog } from '@/components/special-request-dialog'
 import { getStockMap } from '@/lib/supabase/queries/products'
 import { formatPrice } from '@/components/currency'
 import { QtyInput } from '@/components/qty-input'
@@ -27,16 +29,20 @@ export function CartClient({ branchId, hidePrices = false }: CartClientProps) {
   }, [itemCount])
 
   useEffect(() => {
-    if (items.length === 0 || !branchId) return
-    getStockMap(items.map(i => i.product_id), branchId).then(setStock)
+    const catalogIds = items.filter(i => !isSpecialRequest(i)).map(i => i.product_id)
+    if (catalogIds.length === 0 || !branchId) return
+    getStockMap(catalogIds, branchId).then(setStock)
   }, [items, branchId])
 
   function isRequest(productId: string, quantity: number) {
     // In Request a Quote mode every item is just a request — no
     // in-stock/on-request visual split anywhere in the cart.
-    if (hidePrices) return false
+    if (hidePrices || productId.startsWith(SPECIAL_REQUEST_PREFIX)) return false
     return quantity > (stock[productId] ?? 0)
   }
+
+  const [requestOpen, setRequestOpen] = useState(false)
+  const specialCount = items.filter(isSpecialRequest).length
 
   const requestCount = items.filter(i => isRequest(i.product_id, i.quantity)).length
 
@@ -117,6 +123,16 @@ export function CartClient({ branchId, hidePrices = false }: CartClientProps) {
             <div className="lg:col-span-2 space-y-3">
               {items.map(item => {
                 const requested = isRequest(item.product_id, item.quantity)
+                if (item.special) {
+                  return (
+                    <SpecialRequestCartItem
+                      key={item.product_id}
+                      item={item}
+                      onQuantity={(q) => updateQuantity(item.product_id, q)}
+                      onRemove={() => removeItem(item.product_id)}
+                    />
+                  )
+                }
                 return (
                   <div key={item.product_id} className="relative bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
                     {/* Delete — top-right corner, out of the way of the qty/price
@@ -204,6 +220,18 @@ export function CartClient({ branchId, hidePrices = false }: CartClientProps) {
                 )
               })}
 
+              <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+                <p className="text-sm text-slate-600">
+                  <span className="font-semibold text-slate-800">Need something not in our list?</span> Add it to this request.
+                </p>
+                <button
+                  onClick={() => setRequestOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-600 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+                >
+                  <ClipboardList className="w-4 h-4" /> Request an item
+                </button>
+              </div>
+
               <Link
                 href="/"
                 className="flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm font-medium pt-2 transition-colors"
@@ -239,6 +267,11 @@ export function CartClient({ branchId, hidePrices = false }: CartClientProps) {
                   {requestCount > 0 && (
                     <p className="text-[11px] text-amber-600">
                       Includes {requestCount} item{requestCount > 1 ? 's' : ''} on request — total shown assumes full quantity is fulfilled.
+                    </p>
+                  )}
+                  {specialCount > 0 && !hidePrices && (
+                    <p className="text-[11px] text-blue-700">
+                      {specialCount} special request{specialCount > 1 ? 's are' : ' is'} quoted separately and not included above.
                     </p>
                   )}
                   <Link
@@ -277,6 +310,53 @@ export function CartClient({ branchId, hidePrices = false }: CartClientProps) {
           </Link>
         </div>
       )}
+
+      <SpecialRequestDialog open={requestOpen} onClose={() => setRequestOpen(false)} />
+    </div>
+  )
+}
+
+// A special request in the cart: no product page and no price, just what
+// the customer asked for, their photos, and an editable quantity.
+function SpecialRequestCartItem({
+  item, onQuantity, onRemove,
+}: { item: CartItem; onQuantity: (q: number) => void; onRemove: () => void }) {
+  const special = item.special!
+  return (
+    <div className="relative bg-white rounded-xl border border-blue-200 p-4 shadow-sm">
+      <button onClick={onRemove} className="absolute top-3 right-3 text-slate-300 hover:text-red-400 transition-colors p-1" aria-label="Remove request">
+        <Trash2 className="w-4 h-4" />
+      </button>
+      <div className="flex gap-4">
+        <div className="relative w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-blue-50 flex items-center justify-center">
+          {special.thumbs[0] ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={special.thumbs[0]} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <ClipboardList className="w-8 h-8 text-blue-300" />
+          )}
+          {special.thumbs.length > 1 && (
+            <span className="absolute bottom-1 right-1 rounded bg-black/60 text-white text-[10px] px-1">+{special.thumbs.length - 1}</span>
+          )}
+        </div>
+        <div className="flex-1 min-w-0 pr-6">
+          <p className="text-sm font-medium text-slate-900 leading-snug line-clamp-2">{item.product_name}</p>
+          <span className="inline-block mt-1 text-[10px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5">
+            Special request · we&apos;ll quote this
+          </span>
+          {special.details && <p className="text-xs text-slate-500 mt-1 line-clamp-2">{special.details}</p>}
+          <div className="flex items-center gap-1.5 rounded-lg px-1.5 py-1 border bg-blue-50 border-blue-200 mt-3 w-fit">
+            <button onClick={() => onQuantity(item.quantity - 1)} className="w-6 h-6 flex items-center justify-center rounded-md text-blue-600 hover:bg-white">
+              <Minus className="w-3 h-3" />
+            </button>
+            <QtyInput value={item.quantity} onChange={onQuantity} className="w-12 text-sm font-bold text-center text-blue-900" />
+            <button onClick={() => onQuantity(item.quantity + 1)} className="w-6 h-6 flex items-center justify-center rounded-md text-white bg-blue-600 hover:bg-blue-700">
+              <Plus className="w-3 h-3" />
+            </button>
+            <span className="text-xs text-slate-500 pr-1">{item.unit_label}</span>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

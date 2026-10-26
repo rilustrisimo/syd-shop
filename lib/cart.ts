@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import type { CartItem } from '@/lib/types'
-import { pushEcommerceEvent } from '@/lib/analytics'
+import { isSpecialRequest, type CartItem } from '@/lib/types'
+import { pushDataLayerEvent, pushEcommerceEvent } from '@/lib/analytics'
 
 const CART_KEY = 'syd_shop_cart'
 // Every component that calls useCart() gets its own independent local
@@ -73,6 +73,12 @@ export function useCart() {
       writeCart(next)
       return next
     })
+    // Special requests have no price; they're tracked as their own event so
+    // they don't inflate add_to_cart value in GA4/Meta.
+    if (isSpecialRequest(item)) {
+      pushDataLayerEvent('special_request', { item_name: item.product_name, quantity: item.quantity, unit: item.unit_label })
+      return
+    }
     // The single hook point for every "Add to Cart" button app-wide —
     // every useCart() instance's addItem runs this same function body
     // regardless of which component called it.
