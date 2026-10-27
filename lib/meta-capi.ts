@@ -93,7 +93,11 @@ export async function sendMetaLead(input: MetaLeadInput, ctx: MetaRequestContext
         content_type: 'product',
       },
     }],
-    ...(process.env.META_CAPI_TEST_EVENT_CODE ? { test_event_code: process.env.META_CAPI_TEST_EVENT_CODE } : {}),
+    // Local testing only. The OpenNext build bakes .env.local into the
+    // deployed worker, so never let a test code reach live events.
+    ...(process.env.META_CAPI_TEST_EVENT_CODE && process.env.NODE_ENV !== 'production'
+      ? { test_event_code: process.env.META_CAPI_TEST_EVENT_CODE }
+      : {}),
   }
 
   try {
