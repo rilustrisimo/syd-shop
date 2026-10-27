@@ -96,6 +96,9 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
     // the browser, and this is the one moment guaranteed to happen inside
     // the same session as whatever ad/channel brought the customer here.
     pushDataLayerEvent('generate_lead', {
+      // Same ID the server sends to Meta's Conversions API, so Meta counts
+      // this lead once (GTM's Meta tag must pass it as the Event ID).
+      event_id: `lead-${result.orderNumber}`,
       currency: 'PHP',
       value: subtotal,
       transaction_id: result.orderNumber,

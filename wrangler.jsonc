@@ -20,6 +20,9 @@
     }
   ],
   "vars": {
-    "NEXT_PUBLIC_GTM_ID": "GTM-NHSKD7Q8"
+    "NEXT_PUBLIC_GTM_ID": "GTM-NHSKD7Q8",
+    // Meta Pixel / dataset ID (public). The Conversions API token is a
+    // secret: wrangler secret put META_CAPI_ACCESS_TOKEN
+    "META_PIXEL_ID": "1666399431864427"
   },
 }

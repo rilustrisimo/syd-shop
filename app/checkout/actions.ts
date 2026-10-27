@@ -3,6 +3,9 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { getShopSettings } from '@/lib/supabase/queries/shop-settings'
 import { Resend } from 'resend'
+import { after } from 'next/server'
+import { cookies, headers } from 'next/headers'
+import { leadEventId, sendMetaLead, type MetaRequestContext } from '@/lib/meta-capi'
 import { isSpecialRequest, type CartItem, type FulfillmentType } from '@/lib/types'
 
 const MAX_SPECIAL_REQUESTS = 5
@@ -36,6 +39,20 @@ export interface CheckoutPayload {
 export interface CheckoutResult {
   orderNumber?: string
   error?: string
+}
+
+// What Meta needs to match the lead to the person who saw the ad. Read
+// during the request (not inside after()) so it's always available.
+async function metaRequestContext(): Promise<MetaRequestContext> {
+  const h = await headers()
+  const c = await cookies()
+  return {
+    clientIp: h.get('cf-connecting-ip') ?? h.get('x-forwarded-for')?.split(',')[0].trim() ?? null,
+    userAgent: h.get('user-agent'),
+    fbp: c.get('_fbp')?.value ?? null,
+    fbc: c.get('_fbc')?.value ?? null,
+    sourceUrl: h.get('referer'),
+  }
 }
 
 export async function submitOrder(payload: CheckoutPayload): Promise<CheckoutResult> {
@@ -243,6 +260,22 @@ export async function submitOrder(payload: CheckoutPayload): Promise<CheckoutRes
     ? await supabase.from('online_order_lines').insert(allLines)
     : { error: null }
   if (linesErr) console.error('Order lines insert error:', linesErr.message)
+
+  // Server-side Lead for Meta, deduplicated with the browser Pixel's
+  // generate_lead via the shared event ID. Runs after the response so
+  // checkout never waits on Meta.
+  const metaContext = await metaRequestContext()
+  const orderNumber = order.order_number
+  after(() => sendMetaLead({
+    eventId: leadEventId(orderNumber),
+    orderNumber,
+    value: subtotal,
+    itemCount: allLines.length,
+    phone: normalizedPhone,
+    name: name.trim(),
+    municipality: fulfillment === 'delivery' ? municipality : undefined,
+    province: fulfillment === 'delivery' ? province : undefined,
+  }, metaContext))
 
   // Resend email notification
   if (settings.staff_notification_emails && process.env.RESEND_API_KEY) {
