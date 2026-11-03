@@ -6,16 +6,15 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AlertTriangle, CheckCircle, X, ArrowLeft, Package, Truck, ClipboardList } from 'lucide-react'
 import { useCart } from '@/lib/cart'
+import { useContact } from '@/lib/contact'
 import { formatPrice } from '@/components/currency'
 import { optimizedImageUrl } from '@/lib/image'
-import { submitOrder } from '@/app/checkout/actions'
+import { submitOrder } from '@/app/review/actions'
 import { pushDataLayerEvent } from '@/lib/analytics'
-import type { ShopSettings, FulfillmentType, ShopQrCode, ShopBankAccount } from '@/lib/types'
+import type { ShopSettings, FulfillmentType } from '@/lib/types'
 
 interface CheckoutClientProps {
   settings: ShopSettings
-  qrCodes: ShopQrCode[]
-  bankAccounts: ShopBankAccount[]
 }
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
@@ -42,9 +41,10 @@ function Field({ label, required, children }: { label: string; required?: boolea
 
 const inputClass = "w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-colors bg-white"
 
-export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClientProps) {
+export function CheckoutClient({ settings }: CheckoutClientProps) {
   const router = useRouter()
   const { items, subtotal, clearCart, isHydrated } = useCart()
+  const { contact, saveContact, isHydrated: contactHydrated } = useContact()
 
   const [fulfillment, setFulfillment] = useState<FulfillmentType>('delivery')
   const [name, setName] = useState('')
@@ -56,6 +56,23 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const formRef = useRef<HTMLFormElement>(null)
+
+  // Prefill from what this browser already saved (the welcome form, or the
+  // last request). Once, after storage is read, so typing isn't overwritten.
+  const prefilledRef = useRef(false)
+  useEffect(() => {
+    if (!contactHydrated || prefilledRef.current) return
+    prefilledRef.current = true
+    if (!contact) return
+    setName(contact.name ?? '')
+    setPhone(contact.phone ?? '')
+    if (contact.fulfillment) setFulfillment(contact.fulfillment)
+    setStreet(contact.street ?? '')
+    setBarangay(contact.barangay ?? '')
+    setMunicipality(contact.municipality ?? '')
+    setProvince(contact.province ?? '')
+  }, [contactHydrated, contact])
 
   // Guards the empty-cart redirect below from firing when clearCart() runs
   // as part of a successful submission (see handleSubmit) - without this,
@@ -80,13 +97,22 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
     // Photo previews (data URLs) are only for the browser; the server gets
     // the stored photo paths.
     const payloadItems = items.map((i) => (i.special ? { ...i, special: { ...i.special, thumbs: [] } } : i))
-    const result = await submitOrder({ name, phone, fulfillment, street, barangay, municipality, province, notes, items: payloadItems })
+    const result = await submitOrder({
+      name, phone, fulfillment, street, barangay, municipality, province, notes, items: payloadItems,
+      leadId: contact?.leadId, leadToken: contact?.leadToken,
+    })
 
     if (result.error) {
       setError(result.error)
       setSubmitting(false)
       return
     }
+
+    // Keep the details for next time; the lead (if any) is used up.
+    saveContact({
+      name: name.trim(), phone, fulfillment, street, barangay, municipality, province,
+      leadId: undefined, leadToken: undefined,
+    })
 
     orderSubmittedRef.current = true
 
@@ -117,14 +143,15 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
           <Link href="/" className="relative w-10 h-7 flex-shrink-0">
             <Image src="/syd-logo.svg" alt="SYD" fill className="object-contain" />
           </Link>
-          <Link href="/cart" className="text-slate-400 hover:text-white transition-colors">
+          <Link href="/list" className="text-slate-400 hover:text-white transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </Link>
-          <h1 className="font-bold text-white">Checkout</h1>
+          <h1 className="font-bold text-white">Review Your List</h1>
         </div>
       </header>
 
       <form
+        ref={formRef}
         onSubmit={handleSubmit}
         onFocus={() => setError(null)}
         onClickCapture={() => setError(null)}
@@ -134,9 +161,9 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
           <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
           <p className="text-sm text-green-800 leading-relaxed">
             {settings.hide_prices ? (
-              <>Just fill in the details below. Our staff will<strong> call you with pricing to confirm your request</strong>, and nothing is final until then.</>
+              <>Check your list and details below. Our staff will<strong> call you with pricing to confirm your request</strong>, and nothing is final until then.</>
             ) : (
-              <>Just fill in the details below. Our staff will<strong> call you to confirm your order</strong>, and you can still make changes before we prepare anything.</>
+              <>Check your list and details below. Our staff will<strong> call you to confirm prices, stock and delivery</strong>, and you can still make changes before we prepare anything.</>
             )}
           </p>
         </div>
@@ -145,7 +172,7 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
           <div className="lg:col-span-3 space-y-4">
 
             {/* Fulfillment */}
-            <SectionCard title="How would you like to receive your order?">
+            <SectionCard title="How would you like to get your items?">
               <div className="grid grid-cols-2 gap-3">
                 {([
                   { value: 'delivery', label: 'Delivery', emoji: '🚚', desc: 'Delivered to your location' },
@@ -217,44 +244,14 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
                 <div className="flex items-start gap-2.5 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5">
                   <Truck className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-blue-800 leading-relaxed">
-                    Delivery fee will be calculated and confirmed by our staff when they reach out to finalize your order.
+                    Delivery fee will be calculated and confirmed by our staff when they reach out about your request.
                   </p>
                 </div>
               </SectionCard>
             )}
 
-            {/* Payment — informational only, no selection needed here */}
-            <SectionCard title="Accepted Payment Methods">
-              <div className="space-y-4">
-                <p className="text-xs text-slate-500 leading-relaxed">
-                  You don&apos;t need to pay yet — just note which option works for you. Staff will send a secure
-                  payment link once your order is finalized, where you can pick a method and confirm payment.
-                </p>
-
-                <div className="flex flex-wrap gap-2">
-                  {qrCodes.map(qr => (
-                    <div key={qr.id} className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full border border-slate-200 bg-white">
-                      {qr.logo_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={qr.logo_url} alt="" className="h-5 w-auto max-w-[60px] object-contain" />
-                      ) : (
-                        <span className="text-sm">📷</span>
-                      )}
-                      <span className="text-xs font-medium text-slate-600">{qr.label}</span>
-                    </div>
-                  ))}
-                  {bankAccounts.length > 0 && (
-                    <div className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full border border-slate-200 bg-white">
-                      <span className="text-sm">🏦</span>
-                      <span className="text-xs font-medium text-slate-600">Bank Transfer</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </SectionCard>
-
             {/* Notes */}
-            <SectionCard title="Order Notes (Optional)">
+            <SectionCard title="Notes for Our Team (Optional)">
               <textarea value={notes} onChange={e => setNotes(e.target.value)}
                 placeholder="Special instructions, landmarks, or other notes for the staff..."
                 rows={3}
@@ -268,7 +265,7 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
             <div className="sticky top-24 space-y-4">
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="px-5 py-3.5 border-b border-slate-800 bg-slate-900">
-                  <h2 className="font-bold text-[#ffc107] text-xs uppercase tracking-wide">Order Summary</h2>
+                  <h2 className="font-bold text-[#ffc107] text-xs uppercase tracking-wide">List Summary</h2>
                 </div>
                 <div className="p-5 space-y-3">
                   {items.map(item => (
@@ -327,7 +324,8 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
                 <p className="text-blue-800 text-xs leading-relaxed">
                   {settings.hide_prices
                     ? <>After submitting your request, our staff will contact you at <strong>{phone || 'your number'}</strong> with pricing and availability.</>
-                    : <>After placing your order, our staff will contact you at <strong>{phone || 'your number'}</strong> to confirm.</>}
+                    : <>After you submit, our staff will contact you at <strong>{phone || 'your number'}</strong> to confirm.</>}
+                  <span className="block mt-1">You don&apos;t need to pay yet. Once everything is confirmed, we&apos;ll send you a secure payment link.</span>
                   {settings.store_hours && <span className="block mt-1 text-blue-600">Hours: {settings.store_hours}</span>}
                 </p>
               </div>
@@ -335,8 +333,8 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
               <button type="submit" disabled={submitting}
                 className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl text-sm transition-colors shadow-md">
                 {settings.hide_prices
-                  ? (submitting ? 'Submitting Request...' : 'Submit Request')
-                  : (submitting ? 'Placing Order...' : `Place Order · ${formatPrice(total)}`)}
+                  ? (submitting ? 'Sending...' : 'Submit Request')
+                  : (submitting ? 'Sending...' : `Submit Request · ${formatPrice(total)}`)}
               </button>
             </div>
           </div>
@@ -346,7 +344,7 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
         <div className="lg:hidden mt-4 space-y-3">
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
             <div className="px-4 py-3 border-b border-slate-800 bg-slate-900">
-              <h2 className="font-bold text-[#ffc107] text-xs uppercase tracking-wide">Order Summary</h2>
+              <h2 className="font-bold text-[#ffc107] text-xs uppercase tracking-wide">List Summary</h2>
             </div>
             <div className="p-4 space-y-2">
               {items.map(item => (
@@ -377,7 +375,8 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-800">
             {settings.hide_prices
               ? <>Our staff will contact you at <strong>{phone || 'your number'}</strong> with pricing and availability.</>
-              : <>Our staff will contact you at <strong>{phone || 'your number'}</strong> to confirm your order.</>}
+              : <>Our staff will contact you at <strong>{phone || 'your number'}</strong> to confirm your request.</>}
+            <span className="block mt-0.5">No payment needed yet. We&apos;ll send a payment link once it&apos;s confirmed.</span>
             {settings.store_hours && <span className="block mt-0.5 text-blue-600">Hours: {settings.store_hours}</span>}
           </div>
         </div>
@@ -388,12 +387,14 @@ export function CheckoutClient({ settings, qrCodes, bankAccounts }: CheckoutClie
         <button
           type="button"
           disabled={submitting}
-          onClick={handleSubmit as any}
+          // requestSubmit runs the browser's required-field checks, which a
+          // direct handleSubmit call outside the form would skip.
+          onClick={() => formRef.current?.requestSubmit()}
           className="w-full bg-[#ffc107] hover:bg-amber-400 disabled:opacity-60 text-slate-900 font-bold py-3.5 rounded-xl text-sm transition-colors"
         >
           {settings.hide_prices
-            ? (submitting ? 'Submitting Request...' : 'Submit Request')
-            : (submitting ? 'Placing Order...' : `Place Order · ${formatPrice(total)}`)}
+            ? (submitting ? 'Sending...' : 'Submit Request')
+            : (submitting ? 'Sending...' : `Submit Request · ${formatPrice(total)}`)}
         </button>
       </div>
 

@@ -91,7 +91,7 @@ const ProductCard = memo(function ProductCard({ product, qty, hidePrices, onAdd,
               }`}
             >
               <Plus className="w-3.5 h-3.5" />
-              {inStock ? 'Add to Cart' : 'Request'}
+              {inStock ? 'Add to List' : 'Request'}
             </button>
           ) : (
             <div>
@@ -320,8 +320,8 @@ export function ProductGrid({ categoryId }: ProductGridProps) {
       />
       {requestAdded && (
         <div className="fixed bottom-24 lg:bottom-24 left-1/2 -translate-x-1/2 z-40 rounded-full bg-slate-900 text-white text-sm px-4 py-2 shadow-lg flex items-center gap-3">
-          Added to your request
-          <Link href="/cart" className="font-semibold text-[#ffc107] underline">View cart</Link>
+          Added to your list
+          <Link href="/list" className="font-semibold text-[#ffc107] underline">View list</Link>
           <button onClick={() => setRequestAdded(false)} aria-label="Dismiss" className="text-slate-400">✕</button>
         </div>
       )}

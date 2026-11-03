@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { RouteProgress } from '@/components/route-progress'
 import { CallButton } from '@/components/call-button'
+import { WelcomeContactDialog } from '@/components/welcome-contact-dialog'
 import { GtmScript, GtmNoscript } from '@/components/analytics/gtm'
 import { PageViewTracker } from '@/components/analytics/page-view-tracker'
 import { getPublicShopSettings } from '@/lib/supabase/queries/shop-settings'
@@ -9,9 +10,9 @@ import './globals.css'
 export const metadata: Metadata = {
   title: {
     template: '%s · SYD Construction Supplies',
-    default: 'SYD Construction Supplies — Shop Online',
+    default: 'SYD Construction Supplies — Browse & Request',
   },
-  description: 'Order quality construction materials online for delivery or pickup in Bukidnon.',
+  description: 'Browse quality construction materials and send your list online for delivery or pickup in Bukidnon.',
   icons: { icon: '/icon.svg' },
   // Safari/iOS can auto-detect and auto-link plain-text phone numbers
   // anywhere on the page; on some versions that heuristic misfires and
@@ -37,6 +38,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <RouteProgress />
         {children}
         {settings?.store_phone && <CallButton phone={settings.store_phone} />}
+        <WelcomeContactDialog />
       </body>
     </html>
   )

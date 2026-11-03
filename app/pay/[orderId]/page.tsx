@@ -64,10 +64,10 @@ export default async function PaymentPage({ params }: Props) {
           </p>
         </div>
 
-        {/* Order details */}
+        {/* Your list */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-5 py-3.5 border-b border-slate-800 bg-slate-900">
-            <h2 className="font-bold text-[#ffc107] text-xs uppercase tracking-wide">Order Summary</h2>
+            <h2 className="font-bold text-[#ffc107] text-xs uppercase tracking-wide">Your List</h2>
           </div>
           <div className="p-5">
             <div className="space-y-3">

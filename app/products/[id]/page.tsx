@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowLeft, Package, ShoppingCart, Plus, Minus, AlertCircle, Tag, ChevronRight, ClipboardList } from 'lucide-react'
+import { ArrowLeft, Package, Plus, Minus, AlertCircle, Tag, ChevronRight, ClipboardList } from 'lucide-react'
 import { getProductById } from '@/lib/supabase/queries/products'
 import { getPublicShopSettings } from '@/lib/supabase/queries/shop-settings'
 import { useCart } from '@/lib/cart'
@@ -118,8 +118,8 @@ export default function ProductDetailPage() {
               </>
             )}
           </div>
-          <Link href="/cart" className="relative ml-auto flex items-center gap-2 text-slate-400 hover:text-[#ffc107] transition-colors">
-            <ShoppingCart className="w-5 h-5" />
+          <Link href="/list" className="relative ml-auto flex items-center gap-2 text-slate-400 hover:text-[#ffc107] transition-colors">
+            <ClipboardList className="w-5 h-5" />
             {itemCount > 0 && (
               <span className="absolute -top-2 -right-2 bg-[#ffc107] text-slate-900 text-[10px] font-bold rounded-full min-w-[1.1rem] min-h-[1.1rem] flex items-center justify-center px-1">
                 {itemCount > 9 ? '9+' : itemCount}
@@ -235,7 +235,7 @@ export default function ProductDetailPage() {
                 <div className="flex items-center gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
                   <p className="text-xs font-medium">
-                    Currently out of stock — you can still order it on request. Staff will confirm availability and delivery timing when they call.
+                    Currently out of stock — you can still request it. Staff will confirm availability and delivery timing when they call.
                   </p>
                 </div>
               )
@@ -258,7 +258,7 @@ export default function ProductDetailPage() {
                   }`}
                 >
                   <Plus className="w-5 h-5" />
-                  {inStock ? 'Add to Cart' : 'Request This Item'}
+                  {inStock ? 'Add to List' : 'Request This Item'}
                 </button>
               ) : (
                 <div className="space-y-3">
@@ -282,7 +282,7 @@ export default function ProductDetailPage() {
                         onChange={(v) => updateQuantity(product.id, v)}
                         className="w-20 text-center"
                       />
-                      in cart
+                      in your list
                     </span>
                     <button
                       onClick={() => updateQuantity(product.id, cartQty + 1)}
@@ -294,11 +294,11 @@ export default function ProductDetailPage() {
                     </button>
                   </div>
                   <Link
-                    href="/cart"
+                    href="/list"
                     className="flex items-center justify-center gap-1.5 w-full min-w-0 bg-[#ffc107] hover:bg-amber-400 text-slate-900 font-bold py-3.5 px-2 rounded-xl transition-colors"
                   >
-                    <ShoppingCart className="w-4 h-4 flex-shrink-0" />
-                    <span className="min-w-0 truncate">{hidePrices ? 'View Cart' : `Cart · ${formatPrice(subtotal)}`}</span>
+                    <ClipboardList className="w-4 h-4 flex-shrink-0" />
+                    <span className="min-w-0 truncate">{hidePrices ? 'View My List' : `My List · ${formatPrice(subtotal)}`}</span>
                   </Link>
                 </div>
               )}
@@ -333,7 +333,7 @@ export default function ProductDetailPage() {
             }`}
           >
             <Plus className="w-5 h-5" />
-            {inStock ? 'Add to Cart' : 'Request This Item'}
+            {inStock ? 'Add to List' : 'Request This Item'}
           </button>
         ) : (
           <div className="flex items-center gap-2">
@@ -363,14 +363,14 @@ export default function ProductDetailPage() {
               </button>
             </div>
             <Link
-              href="/cart"
+              href="/list"
               className="flex-1 min-w-0 h-12 bg-[#ffc107] hover:bg-amber-400 text-slate-900 font-bold rounded-xl flex items-center justify-center gap-1.5 px-2"
             >
-              <ShoppingCart className="w-4 h-4 flex-shrink-0" />
+              <ClipboardList className="w-4 h-4 flex-shrink-0" />
               {/* truncate (not wrap) so a large cart total never grows this
                   button taller than the qty stepper next to it — the exact
                   bug that kept resurfacing as totals got longer. */}
-              <span className="min-w-0 truncate">{hidePrices ? 'View Cart' : `Cart · ${formatPrice(subtotal)}`}</span>
+              <span className="min-w-0 truncate">{hidePrices ? 'View My List' : `My List · ${formatPrice(subtotal)}`}</span>
             </Link>
           </div>
         )}

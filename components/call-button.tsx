@@ -13,7 +13,7 @@ interface CallButtonProps {
 // checkout online — a safety net if the site trips someone up. Bottom-left
 // so it never collides with the cart FAB (bottom-right, desktop only).
 //
-// Hidden on product detail/cart/checkout/order-confirmation: those pages
+// Hidden on product detail/list/review/order-confirmation: those pages
 // already have their own prominent sticky action bar (or, for the order
 // confirmation page, its own contact/"call us" section), so a second
 // floating CTA is redundant there — and worse, a fixed-position button
@@ -30,11 +30,11 @@ export function CallButton({ phone }: CallButtonProps) {
   const hasOwnActionBar =
     pathname?.startsWith('/products/') ||
     pathname?.startsWith('/order/') ||
-    pathname === '/cart' ||
-    pathname === '/checkout'
+    pathname === '/list' ||
+    pathname === '/review'
   if (hasOwnActionBar) return null
 
-  // Home/category pages show a floating "View Cart" bar once the cart has
+  // Home/category pages show a floating "View My List" bar once the list has
   // items — sit low otherwise so it doesn't float awkwardly high with
   // nothing to clear underneath it.
   const hasBottomBar = itemCount > 0
@@ -50,7 +50,7 @@ export function CallButton({ phone }: CallButtonProps) {
         <span className="relative inline-flex rounded-full h-3 w-3 bg-white" />
       </span>
       <Phone className="w-5 h-5" />
-      <span className="hidden sm:inline">Call to Order</span>
+      <span className="hidden sm:inline">Call Us</span>
     </a>
   )
 }

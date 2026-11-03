@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowLeft, Package, Trash2, Plus, Minus, ShoppingBag, ShoppingCart, Clock, ClipboardList } from 'lucide-react'
+import { ArrowLeft, Package, Trash2, Plus, Minus, ClipboardList, ClipboardCheck, Clock } from 'lucide-react'
 import { useCart } from '@/lib/cart'
 import { isSpecialRequest, SPECIAL_REQUEST_PREFIX, type CartItem } from '@/lib/types'
 import { SpecialRequestDialog } from '@/components/special-request-dialog'
@@ -24,8 +24,8 @@ export function CartClient({ branchId, hidePrices = false }: CartClientProps) {
 
   useEffect(() => {
     document.title = itemCount > 0
-      ? `Cart (${itemCount}) · SYD Construction Supplies`
-      : 'Cart · SYD Construction Supplies'
+      ? `My List (${itemCount}) · SYD Construction Supplies`
+      : 'My List · SYD Construction Supplies'
   }, [itemCount])
 
   useEffect(() => {
@@ -67,7 +67,7 @@ export function CartClient({ branchId, hidePrices = false }: CartClientProps) {
               <ArrowLeft className="w-5 h-5" />
             </Link>
             <h1 className="font-bold text-white">
-              Cart {itemCount > 0 && <span className="text-slate-400 font-normal text-sm">({itemCount} items)</span>}
+              My List {itemCount > 0 && <span className="text-slate-400 font-normal text-sm">({itemCount} items)</span>}
             </h1>
           </div>
           {itemCount > 0 && (
@@ -84,11 +84,11 @@ export function CartClient({ branchId, hidePrices = false }: CartClientProps) {
       {itemCount === 0 ? (
         <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 px-6 text-center">
           <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center">
-            <ShoppingBag className="w-10 h-10 text-slate-300" />
+            <ClipboardList className="w-10 h-10 text-slate-300" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-700 mb-1">Your cart is empty</h2>
-            <p className="text-sm text-slate-400">Add products from the catalog to get started.</p>
+            <h2 className="text-lg font-bold text-slate-700 mb-1">Your list is empty</h2>
+            <p className="text-sm text-slate-400">Browse products and add what you need to start your list.</p>
           </div>
           <Link
             href="/"
@@ -104,7 +104,7 @@ export function CartClient({ branchId, hidePrices = false }: CartClientProps) {
               <Clock className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
               <p className="text-xs text-amber-800">
                 <strong>{requestCount} item{requestCount > 1 ? 's are' : ' is'} on request</strong> — not currently in stock.
-                Staff will confirm availability and delivery timing when they call to verify your order.
+                Staff will confirm availability and delivery timing when they call to confirm your request.
               </p>
             </div>
           )}
@@ -237,15 +237,15 @@ export function CartClient({ branchId, hidePrices = false }: CartClientProps) {
                 className="flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm font-medium pt-2 transition-colors"
               >
                 <ArrowLeft className="w-4 h-4" />
-                Continue Shopping
+                Continue Browsing
               </Link>
             </div>
 
-            {/* Order summary — desktop sidebar */}
+            {/* List summary — desktop sidebar */}
             <div className="hidden lg:block">
               <div className="sticky top-24 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
                 <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-900">
-                  <h2 className="font-bold text-[#ffc107] text-sm uppercase tracking-wide">Order Summary</h2>
+                  <h2 className="font-bold text-[#ffc107] text-sm uppercase tracking-wide">List Summary</h2>
                 </div>
                 <div className="p-5 space-y-4">
                   <div className="space-y-2 text-sm">
@@ -255,7 +255,7 @@ export function CartClient({ branchId, hidePrices = false }: CartClientProps) {
                     </div>
                     <div className="flex justify-between text-slate-400 text-xs">
                       <span>Delivery fee</span>
-                      <span>{hidePrices ? 'Confirmed by staff' : 'Calculated at checkout'}</span>
+                      <span>Confirmed by staff</span>
                     </div>
                   </div>
                   {!hidePrices && (
@@ -275,16 +275,16 @@ export function CartClient({ branchId, hidePrices = false }: CartClientProps) {
                     </p>
                   )}
                   <Link
-                    href="/checkout"
+                    href="/review"
                     onClick={handleBeginCheckout}
                     className="block w-full text-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl transition-colors"
                   >
-                    Proceed to Checkout
+                    Review My List
                   </Link>
                   <p className="text-xs text-slate-400 text-center">
                     {hidePrices
                       ? 'Our staff will call you with pricing and delivery details'
-                      : 'Delivery fee confirmed by our staff after you order'}
+                      : 'Delivery fee confirmed by our staff after you submit'}
                   </p>
                 </div>
               </div>
@@ -293,7 +293,7 @@ export function CartClient({ branchId, hidePrices = false }: CartClientProps) {
         </div>
       )}
 
-      {/* Mobile bottom checkout bar */}
+      {/* Mobile bottom review bar */}
       {itemCount > 0 && (
         <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900 border-t border-slate-800 p-3 shadow-lg">
           <div className="flex items-center justify-between mb-2 px-1">
@@ -301,12 +301,12 @@ export function CartClient({ branchId, hidePrices = false }: CartClientProps) {
             {!hidePrices && <span className="font-bold text-[#ffc107]">{formatPrice(subtotal)}</span>}
           </div>
           <Link
-            href="/checkout"
+            href="/review"
             onClick={handleBeginCheckout}
             className="flex items-center justify-center gap-2 w-full bg-[#ffc107] hover:bg-amber-400 text-slate-900 font-bold py-3.5 rounded-xl transition-colors"
           >
-            <ShoppingCart className="w-4 h-4" />
-            Proceed to Checkout
+            <ClipboardCheck className="w-4 h-4" />
+            Review My List
           </Link>
         </div>
       )}

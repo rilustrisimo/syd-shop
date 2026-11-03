@@ -2,27 +2,17 @@
 
 import { createServerClient } from '@/lib/supabase/server'
 import { getShopSettings } from '@/lib/supabase/queries/shop-settings'
-import { Resend } from 'resend'
 import { after } from 'next/server'
 import { cookies, headers } from 'next/headers'
 import { leadEventId, sendMetaLead, type MetaRequestContext } from '@/lib/meta-capi'
 import { isSpecialRequest, type CartItem, type FulfillmentType } from '@/lib/types'
+import { normalizePhone } from '@/lib/phone'
+import { escapeHtml, notifyStaff, posOrderUrl } from '@/lib/notify-staff'
 
 const MAX_SPECIAL_REQUESTS = 5
 // Exactly what uploadSpecialRequestPhoto() produces — anything else is a
 // tampered cart and must not be attached to an order.
 const PHOTO_PATH = /^pending\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-}
-
-function normalizePhone(raw: string): string {
-  const digits = raw.replace(/\D/g, '')
-  if (digits.startsWith('63') && digits.length === 12) return '0' + digits.slice(2)
-  if (digits.length === 10 && digits.startsWith('9')) return '0' + digits
-  return digits
-}
 
 export interface CheckoutPayload {
   name: string
@@ -34,6 +24,9 @@ export interface CheckoutPayload {
   province: string
   notes: string
   items: CartItem[]
+  // The 'lead' row the welcome form created, if this browser has one.
+  leadId?: string
+  leadToken?: string
 }
 
 export interface CheckoutResult {
@@ -56,16 +49,16 @@ async function metaRequestContext(): Promise<MetaRequestContext> {
 }
 
 export async function submitOrder(payload: CheckoutPayload): Promise<CheckoutResult> {
-  const { name, phone, fulfillment, street, barangay, municipality, province, notes, items } = payload
+  const { name, phone, fulfillment, street, barangay, municipality, province, notes, items, leadId, leadToken } = payload
 
   if (!name.trim() || !phone.trim()) return { error: 'Name and phone are required.' }
-  if (items.length === 0) return { error: 'Your cart is empty.' }
+  if (items.length === 0) return { error: 'Your list is empty.' }
   if (fulfillment === 'delivery' && (!barangay.trim() || !municipality.trim())) {
     return { error: 'Delivery address is required.' }
   }
 
   if (items.some(i => !i.quantity || i.quantity <= 0)) {
-    return { error: 'Invalid item quantity in your cart. Please review your cart and try again.' }
+    return { error: 'Invalid item quantity in your list. Please review your list and try again.' }
   }
 
   // Special requests (items not in the catalog) are validated on their own —
@@ -74,13 +67,13 @@ export async function submitOrder(payload: CheckoutPayload): Promise<CheckoutRes
   const specialItems = items.filter(isSpecialRequest)
   const catalogItems = items.filter(i => !isSpecialRequest(i))
   if (specialItems.length > MAX_SPECIAL_REQUESTS) {
-    return { error: `Please keep special requests to ${MAX_SPECIAL_REQUESTS} per order.` }
+    return { error: `Please keep special requests to ${MAX_SPECIAL_REQUESTS} per request.` }
   }
   const specialLines: { name: string; details: string; unit: string; quantity: number; photos: string[] }[] = []
   for (const s of specialItems) {
     const itemName = (s.product_name ?? '').trim().slice(0, 120)
     const photos = Array.isArray(s.special?.photos) ? s.special!.photos : []
-    if (!itemName) return { error: 'A special request is missing its description. Please review your cart.' }
+    if (!itemName) return { error: 'A special request is missing its description. Please review your list.' }
     if (photos.length > 3 || photos.some(p => typeof p !== 'string' || !PHOTO_PATH.test(p))) {
       return { error: 'A special request has an invalid photo. Please remove it and add the photo again.' }
     }
@@ -116,7 +109,7 @@ export async function submitOrder(payload: CheckoutPayload): Promise<CheckoutRes
 
   if (productsErr) {
     console.error('Product validation error:', productsErr.message)
-    return { error: 'Failed to validate your order. Please try again.' }
+    return { error: "We couldn't check your list. Please try again." }
   }
 
   const productMap = new Map((dbProducts ?? []).map((p: any) => [p.id, p]))
@@ -138,7 +131,7 @@ export async function submitOrder(payload: CheckoutPayload): Promise<CheckoutRes
   })
 
   if (unavailable.length > 0) {
-    return { error: `These items are no longer available: ${unavailable.join(', ')}. Please remove them from your cart and try again.` }
+    return { error: `These items are no longer available: ${unavailable.join(', ')}. Please remove them from your list and try again.` }
   }
 
   const orderItems = validatedItems as { product_id: string; product_code: string; product_name: string; unit_label: string; unit_price: number; quantity: number }[]
@@ -196,37 +189,64 @@ export async function submitOrder(payload: CheckoutPayload): Promise<CheckoutRes
     console.error('Customer lookup error:', err)
   }
 
-  // Insert order
-  const { data: order, error: orderErr } = await supabase
-    .from('online_orders')
-    .insert({
-      status: 'pending',
-      fulfillment,
-      customer_name: name.trim(),
-      customer_phone: normalizedPhone,
-      address: fulfillment === 'delivery' ? [street, barangay, municipality, province].filter(Boolean).join(', ') : null,
-      barangay: barangay || null,
-      municipality: municipality || null,
-      province: province || null,
-      latitude: null,
-      longitude: null,
-      distance_km: null,
-      payment_method: null,
-      payment_qr_label: null,
-      payment_status: 'unpaid',
-      payment_reference_no: null,
-      subtotal,
-      delivery_fee: 0,
-      total_amount,
-      notes: notes || null,
-      customer_id: customerId,
-    })
-    .select('id, order_number')
-    .single()
+  const orderFields = {
+    status: 'pending',
+    fulfillment,
+    customer_name: name.trim(),
+    customer_phone: normalizedPhone,
+    address: fulfillment === 'delivery' ? [street, barangay, municipality, province].filter(Boolean).join(', ') : null,
+    barangay: barangay || null,
+    municipality: municipality || null,
+    province: province || null,
+    latitude: null,
+    longitude: null,
+    distance_km: null,
+    payment_method: null,
+    payment_qr_label: null,
+    payment_status: 'unpaid',
+    payment_reference_no: null,
+    subtotal,
+    delivery_fee: 0,
+    total_amount,
+    notes: notes || null,
+    customer_id: customerId,
+  }
 
-  if (orderErr || !order) {
-    console.error('Order insert error:', orderErr?.message)
-    return { error: 'Failed to place your order. Please try again.' }
+  // Visitors who left their number on the welcome form already have a
+  // 'lead' row: fill that one in (same row staff may already be calling
+  // about) instead of creating a second entry. The token is single-use.
+  // If it no longer matches (already submitted, cancelled or deleted by
+  // staff) this is simply a new request.
+  let order: { id: string; order_number: string } | null = null
+  let fromLead = false
+  if (leadId && leadToken) {
+    const now = new Date().toISOString()
+    const { data: converted } = await supabase
+      .from('online_orders')
+      .update({ ...orderFields, lead_token: null, lead_converted_at: now })
+      .eq('id', leadId)
+      .eq('lead_token', leadToken)
+      .eq('status', 'lead')
+      .is('deleted_at', null)
+      .select('id, order_number')
+      .maybeSingle()
+    if (converted) {
+      order = converted
+      fromLead = true
+    }
+  }
+
+  if (!order) {
+    const { data: inserted, error: orderErr } = await supabase
+      .from('online_orders')
+      .insert(orderFields)
+      .select('id, order_number')
+      .single()
+    if (orderErr || !inserted) {
+      console.error('Order insert error:', orderErr?.message)
+      return { error: "We couldn't send your request. Please try again." }
+    }
+    order = inserted
   }
 
   // Insert order lines
@@ -277,43 +297,31 @@ export async function submitOrder(payload: CheckoutPayload): Promise<CheckoutRes
     province: fulfillment === 'delivery' ? province : undefined,
   }, metaContext))
 
-  // Resend email notification
-  if (settings.staff_notification_emails && process.env.RESEND_API_KEY) {
-    const emails = settings.staff_notification_emails.split(',').map(e => e.trim()).filter(Boolean)
-    if (emails.length > 0) {
-      try {
-        const resend = new Resend(process.env.RESEND_API_KEY)
-        const itemsList = orderItems.map(i =>
-          `• ${i.product_name} × ${i.quantity} ${i.unit_label} — ₱${(i.unit_price * i.quantity).toLocaleString('en-PH')}`
-        ).join('<br>')
-
-        await resend.emails.send({
-          from: process.env.RESEND_FROM_EMAIL ?? 'orders@sydconstruct.com',
-          to: emails,
-          subject: `New Online Order — ${order.order_number}`,
-          html: `
-            <h2>New Online Order Received</h2>
-            <p><strong>Order:</strong> ${order.order_number}</p>
-            <p><strong>Customer:</strong> ${name.trim()} · ${normalizedPhone}</p>
-            <p><strong>Fulfillment:</strong> ${fulfillment === 'delivery' ? 'Delivery (fee not yet set)' : 'Pickup'}</p>
-            <p><strong>Payment:</strong> not yet selected — send a payment link once the order is finalized</p>
-            <hr/>
-            ${itemsList ? `<p><strong>Items:</strong><br>${itemsList}</p>` : ''}
-            ${specialLines.length ? `<p><strong>Special requests (not in catalog — needs a quote):</strong><br>${specialLines.map(s =>
-              `• ${escapeHtml(s.name)} × ${s.quantity} ${escapeHtml(s.unit)}${s.details ? ` — ${escapeHtml(s.details)}` : ''}${s.photos.length ? ` (${s.photos.length} photo${s.photos.length > 1 ? 's' : ''})` : ''}`
-            ).join('<br>')}</p>` : ''}
-            <hr/>
-            <p><strong>Subtotal:</strong> ₱${subtotal.toLocaleString('en-PH')}</p>
-            ${notes ? `<p><strong>Notes:</strong> ${notes}</p>` : ''}
-            <hr/>
-            <p><a href="${process.env.NEXT_PUBLIC_POS_URL ?? 'https://app.sydconstruct.com'}/orders/online/${order.id}">View Order in POS →</a></p>
-          `,
-        })
-      } catch (emailErr) {
-        console.error('Email send error:', emailErr)
-      }
-    }
-  }
+  // Staff email
+  const itemsList = orderItems.map(i =>
+    `• ${escapeHtml(i.product_name)} × ${i.quantity} ${escapeHtml(i.unit_label)} — ₱${(i.unit_price * i.quantity).toLocaleString('en-PH')}`
+  ).join('<br>')
+  await notifyStaff(
+    `New Online Order — ${order.order_number}${fromLead ? ' (from lead)' : ''}`,
+    `
+      <h2>New Online Order Received</h2>
+      ${fromLead ? '<p><em>This visitor left their number earlier; their lead is now this order.</em></p>' : ''}
+      <p><strong>Order:</strong> ${order.order_number}</p>
+      <p><strong>Customer:</strong> ${escapeHtml(name.trim())} · ${normalizedPhone}</p>
+      <p><strong>Fulfillment:</strong> ${fulfillment === 'delivery' ? 'Delivery (fee not yet set)' : 'Pickup'}</p>
+      <p><strong>Payment:</strong> not yet selected — send a payment link once the order is finalized</p>
+      <hr/>
+      ${itemsList ? `<p><strong>Items:</strong><br>${itemsList}</p>` : ''}
+      ${specialLines.length ? `<p><strong>Special requests (not in catalog — needs a quote):</strong><br>${specialLines.map(s =>
+        `• ${escapeHtml(s.name)} × ${s.quantity} ${escapeHtml(s.unit)}${s.details ? ` — ${escapeHtml(s.details)}` : ''}${s.photos.length ? ` (${s.photos.length} photo${s.photos.length > 1 ? 's' : ''})` : ''}`
+      ).join('<br>')}</p>` : ''}
+      <hr/>
+      <p><strong>Subtotal:</strong> ₱${subtotal.toLocaleString('en-PH')}</p>
+      ${notes ? `<p><strong>Notes:</strong> ${escapeHtml(notes)}</p>` : ''}
+      <hr/>
+      <p><a href="${posOrderUrl(order.id)}">View Order in POS →</a></p>
+    `,
+  )
 
   return { orderNumber: order.order_number }
 }

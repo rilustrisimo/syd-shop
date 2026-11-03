@@ -83,7 +83,7 @@ export async function sendMetaLead(input: MetaLeadInput, ctx: MetaRequestContext
       event_time: Math.floor(Date.now() / 1000),
       event_id: input.eventId,
       action_source: 'website',
-      event_source_url: ctx.sourceUrl ?? 'https://sydconstruct.com/checkout',
+      event_source_url: ctx.sourceUrl ?? 'https://sydconstruct.com/review',
       user_data: userData,
       custom_data: {
         currency: 'PHP',

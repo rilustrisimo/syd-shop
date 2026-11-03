@@ -24,7 +24,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!category) return { title: 'Category Not Found' }
   return {
     title: category.name,
-    description: `Shop ${category.name} at SYD Construction Supplies — order online for delivery or pickup.`,
+    description: `Browse ${category.name} at SYD Construction Supplies — request online for delivery or pickup.`,
   }
 }
 

@@ -4,7 +4,7 @@ import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ShoppingCart, Search, Menu, X, ChevronRight, ClipboardList } from 'lucide-react'
+import { Search, Menu, X, ChevronRight, ClipboardList } from 'lucide-react'
 import { useCart } from '@/lib/cart'
 import { slugify } from '@/lib/slug'
 import { CatalogContext } from '@/lib/catalog-context'
@@ -133,13 +133,13 @@ export function CatalogShell({ categories, branchId, storeName = 'SYD Constructi
                 </div>
               </div>
 
-              {/* Cart */}
+              {/* My List */}
               <Link
-                href="/cart"
+                href="/list"
                 className="relative flex-shrink-0 flex items-center gap-2 bg-[#ffc107] hover:bg-amber-400 text-slate-900 text-sm font-bold px-3 py-2 rounded-lg transition-colors"
               >
-                <ShoppingCart className="w-4 h-4" />
-                <span className="hidden sm:inline">Cart</span>
+                <ClipboardList className="w-4 h-4" />
+                <span className="hidden sm:inline">My List</span>
                 {itemCount > 0 && (
                   <span className="flex items-center justify-center bg-slate-900 text-[#ffc107] text-xs font-bold rounded-full w-5 h-5 leading-none">
                     {itemCount > 99 ? '99+' : itemCount}
@@ -269,31 +269,31 @@ export function CatalogShell({ categories, branchId, storeName = 'SYD Constructi
           </main>
         </div>
 
-        {/* ── Sticky Cart Bar (mobile only) ── */}
+        {/* ── Sticky List Bar (mobile only) ── */}
         {itemCount > 0 && (
           <div className="fixed bottom-0 left-0 right-0 z-40 lg:hidden p-3 bg-slate-900 border-t border-slate-800 shadow-lg">
             <Link
-              href="/cart"
+              href="/list"
               className="flex items-center justify-between bg-[#ffc107] hover:bg-amber-400 text-slate-900 px-4 py-3 rounded-xl font-bold shadow-md transition-colors"
             >
               <div className="flex items-center gap-2">
                 <span className="flex items-center justify-center bg-slate-900/20 text-slate-900 text-xs font-bold rounded-full w-5 h-5">
                   {itemCount}
                 </span>
-                <span className="text-sm">View Cart</span>
+                <span className="text-sm">View My List</span>
               </div>
               {!hidePrices && <span className="font-bold">{formatPrice(subtotal)}</span>}
             </Link>
           </div>
         )}
 
-        {/* ── Desktop Cart FAB ── */}
+        {/* ── Desktop List FAB ── */}
         {itemCount > 0 && (
           <Link
-            href="/cart"
+            href="/list"
             className="hidden lg:flex fixed bottom-6 right-6 z-40 items-center gap-3 bg-[#ffc107] hover:bg-amber-400 text-slate-900 px-5 py-3 rounded-full shadow-xl font-bold transition-all hover:scale-105"
           >
-            <ShoppingCart className="w-4 h-4" />
+            <ClipboardList className="w-4 h-4" />
             <span>{itemCount} {itemCount === 1 ? 'item' : 'items'}</span>
             {!hidePrices && <span className="bg-slate-900/15 rounded-full px-2 py-0.5 text-sm">{formatPrice(subtotal)}</span>}
           </Link>

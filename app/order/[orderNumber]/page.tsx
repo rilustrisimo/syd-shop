@@ -9,7 +9,7 @@ import { TrackedTelLink } from '@/components/analytics/tracked-tel-link'
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { orderNumber } = await params
-  return { title: `Order ${orderNumber} Confirmed` }
+  return { title: `Request ${orderNumber} Received` }
 }
 
 interface Props {
@@ -32,8 +32,8 @@ export default async function OrderConfirmationPage({ params }: Props) {
   if (!order) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-6 text-center gap-4">
-        <p className="text-slate-500">Order not found.</p>
-        <Link href="/" className="text-blue-600 text-sm font-medium">Back to Shop</Link>
+        <p className="text-slate-500">Request not found.</p>
+        <Link href="/" className="text-blue-600 text-sm font-medium">Back to Products</Link>
       </div>
     )
   }
@@ -73,17 +73,17 @@ export default async function OrderConfirmationPage({ params }: Props) {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">
-              {settings?.hide_prices ? '📝 Request Submitted!' : '🎉 Order Submitted!'}
+              📝 Request Sent!
             </h1>
             <p className="text-slate-500 text-sm mt-1">
               {order.customer_name ? `Thanks, ${order.customer_name.split(' ')[0]}!` : 'Thanks so much!'}{' '}
               {settings?.hide_prices
                 ? "We've got your request and we'll be in touch with pricing shortly."
-                : "We've got your order and we're excited to get it ready for you."}
+                : "We've got your list and we're excited to get it ready for you."}
             </p>
           </div>
           <div className="inline-block bg-slate-900 border border-slate-700 rounded-xl px-5 py-2">
-            <p className="text-xs text-[#ffc107]/70 font-medium uppercase tracking-wide">Order Number</p>
+            <p className="text-xs text-[#ffc107]/70 font-medium uppercase tracking-wide">Reference Number</p>
             <p className="text-xl font-bold text-[#ffc107] font-mono mt-0.5">{order.order_number}</p>
           </div>
         </div>
@@ -103,7 +103,7 @@ export default async function OrderConfirmationPage({ params }: Props) {
                 <p className="text-xs text-slate-500 mt-0.5">
                   {settings?.hide_prices
                     ? <>One of our team will call or text <strong>{order.customer_phone}</strong> with pricing and availability for your request.</>
-                    : <>One of our team will call or text <strong>{order.customer_phone}</strong> to confirm the details and finalize your order.</>}
+                    : <>One of our team will call or text <strong>{order.customer_phone}</strong> to confirm prices, stock and delivery for your request.</>}
                 </p>
               </div>
             </div>
@@ -134,8 +134,8 @@ export default async function OrderConfirmationPage({ params }: Props) {
                   {order.fulfillment === 'delivery'
                     ? order.address
                       ? `Delivering to: ${order.address}`
-                      : "We'll prepare your order for delivery to your pinned location."
-                    : 'Visit our store to pick up your order once it\'s ready.'}
+                      : "We'll prepare your items for delivery to your pinned location."
+                    : 'Visit our store to pick up your items once they\'re ready.'}
                 </p>
               </div>
             </div>
@@ -147,7 +147,7 @@ export default async function OrderConfirmationPage({ params }: Props) {
                 <div>
                   <p className="text-sm font-medium text-slate-800">Some items may take longer</p>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    A few items in your order are low in stock. Staff will confirm availability when they call —
+                    A few items in your list are low in stock. Staff will confirm availability when they call —
                     those items may take 1–2 extra days to arrive.
                   </p>
                 </div>
@@ -156,10 +156,10 @@ export default async function OrderConfirmationPage({ params }: Props) {
           </div>
         </div>
 
-        {/* Order details */}
+        {/* Your list */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-5 py-3.5 border-b border-slate-800 bg-slate-900">
-            <h2 className="font-bold text-[#ffc107] text-xs uppercase tracking-wide">Order Details</h2>
+            <h2 className="font-bold text-[#ffc107] text-xs uppercase tracking-wide">Your List</h2>
           </div>
           <div className="p-5">
             <div className="space-y-3">
@@ -208,7 +208,7 @@ export default async function OrderConfirmationPage({ params }: Props) {
                         <span className="text-slate-600"> ({order.payment_qr_label})</span>
                       )}
                     </>
-                  : 'Payment: not selected yet — staff will send a payment link once your order is finalized.'}
+                  : 'Payment: not selected yet — staff will send a payment link once your request is confirmed.'}
               </p>
               {order.payment_reference_no && (
                 <p>Reference: <span className="text-slate-600">{order.payment_reference_no}</span></p>
@@ -234,7 +234,7 @@ export default async function OrderConfirmationPage({ params }: Props) {
           href="/"
           className="block w-full text-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition-colors shadow-sm"
         >
-          Continue Shopping
+          Continue Browsing
         </Link>
       </div>
     </div>
